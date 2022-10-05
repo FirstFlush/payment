@@ -48,20 +48,19 @@ class CryptoWallet(models.Model):
 class CryptoAddressManager(models.Manager):
 
 
-    def create_address(self, btc_amount):
+    def new_address(self, wallet, cad_amount, btc_amount):
 
-        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount}")
+        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount}").read()
         request = json.loads(request)
 
-        address = request['address']
-        # btc_amount
+        btc_address = request['address']
 
-        # CryptoAddress.objects.create(
-        #     address=address,
-        #     wallet=wallet,
-        #     cad_due=cad,
-        #     btc_due=btc
-        # )
+        CryptoAddress.objects.create(
+            address=btc_address,
+            wallet=wallet,
+            cad_due=cad_amount,
+            btc_due=btc_amount
+        )
 # electrum output:
 # {
 #     "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
