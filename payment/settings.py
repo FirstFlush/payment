@@ -72,6 +72,7 @@ INSTALLED_APPS = [
 #    'psycopg2',
     'wallet',
     'price',
+    'account',
 ]
 
 MIDDLEWARE = [
@@ -135,6 +136,9 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+
+AUTH_USER_MODEL = 'account.Account'
 
 
 # Internationalization

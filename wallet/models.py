@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from price.models import CryptoCoin, CryptoPrice
+from account.models import Account
 
 import json
 import decimal
@@ -25,14 +26,13 @@ def decimalize(dictionary):
 
 
 
-
-
-
 class CryptoWallet(models.Model):
 
+    account_id  = models.ForeignKey(to=Account, on_delete=models.CASCADE)
     wallet_name = models.CharField(max_length=255, unique=True)
     mpk         = models.CharField(max_length=255, unique=True)
     slug        = models.SlugField(max_length=255, unique=True)
+
 
     def path(self):
         return f"{settings.WALLET_DIR}/{self.wallet_name}"
@@ -47,16 +47,35 @@ class CryptoWallet(models.Model):
 
 class CryptoAddressManager(models.Manager):
 
-    def create_address(self, wallet, cad, btc):
 
-        address = os.popen(f"{settings.ELECTRUM} createnewaddress").read()
+    def create_address(self, btc_amount):
 
-        CryptoAddress.objects.create(
-            address=address,
-            wallet=wallet,
-            cad_due=cad,
-            btc_due=btc
-        )
+        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount}")
+        request = json.loads(request)
+
+        address = request['address']
+        # btc_amount
+
+        # CryptoAddress.objects.create(
+        #     address=address,
+        #     wallet=wallet,
+        #     cad_due=cad,
+        #     btc_due=btc
+        # )
+# electrum output:
+# {
+#     "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
+#     "address": "bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u",
+#     "amount_BTC": "0.00027921",
+#     "amount_sat": 27921,
+#     "expiration": 3600,
+#     "is_lightning": false,
+#     "message": "",
+#     "status": 0,
+#     "status_str": "Expires in about 1 hour",
+#     "timestamp": 1664956697
+# }
+
 
 
 class CryptoAddress(models.Model):
@@ -94,14 +113,12 @@ class CryptoAddress(models.Model):
 
 
     def notify(self, url=str):
-        '''Electrum notify command. Returns true'''
+        '''Electrum notify command. Returns boolean'''
         # TODO url = reverse(this function does some urls.py shit)
         if json.loads(os.popen(f"{settings.ELECTRUM} notify {self.address} {url}").read()) == True:
             return True
         else:
             return False
-
-
 
 
 
