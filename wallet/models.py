@@ -1,5 +1,9 @@
 from django.db import models
 from django.conf import settings
+from django_cryptography.fields import encrypt
+from django.utils.text import slugify
+from error.errors import WalletCloseError, WalletLoadError
+
 from price.models import CryptoCoin, CryptoPrice
 from account.models import Account
 
@@ -9,6 +13,7 @@ import os
 import qrcode
 import qrcode.image.svg
 from math import isclose
+import hashlib
 
 
 def decimalize(dictionary):
@@ -27,22 +32,93 @@ def decimalize(dictionary):
     return dictionary
 
 
+class CryptoWalletManager(models.Manager):
+
+    def create_wallet(self, wallet_name, account, is_vendor):
+        '''Create a brand new wallet'''
+
+        new_wallet = CryptoWallet(
+            accuont_id=account,
+            wallet_name=wallet_name,
+            is_vendor=is_vendor,
+            slug=slugify(wallet_name)
+        )
+
+        create_wallet = json.loads(os.popen(f"{settings.ELECTRUM} create -w {new_wallet.slug}").read())
+        seed = create_wallet['seed']
+        os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.slug}")
+        # new_wallet.mpk = json.loads(os.popen(f"{settings.ELECTRUM} getmpk -w {new_wallet.slug}").read())
+        new_wallet.load_wallet()
+        new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
+        new_wallet.save()
+
+        return new_wallet
+
+
+    def restore_wallet(self, account, wallet_name, is_vendor, mpk):
+        '''Restores a wallet from MPK'''
+
+        new_wallet = CryptoWallet(
+            account_id=account,
+            wallet_name=wallet_name,
+            is_vendor=is_vendor,
+            slug=slugify(wallet_name),
+            mpk=mpk
+        )
+
+        restore_wallet = json.loads(os.popen(f"{settings.ELECTRUM} restore {new_wallet.mpk} -w {new_wallet.path()}").read())
+        new_wallet.load_wallet()
+        # os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.path()}")
+        new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
+        new_wallet.save()
+
 
 class CryptoWallet(models.Model):
 
     account_id  = models.ForeignKey(to=Account, on_delete=models.CASCADE)
     wallet_name = models.CharField(max_length=255, unique=True)
+    vendor_key  = models.CharField(max_length=255, unique=True)
     mpk         = models.CharField(max_length=255, unique=True)
     slug        = models.SlugField(max_length=255, unique=True)
+    is_vendor   = models.BooleanField(default=False)
+    is_active   = models.BooleanField(default=True)
+
+    objects = CryptoWalletManager()
 
 
     def path(self):
-        file_name = self.slug.replace('-','_')
-
+        if self.slug == 'default-wallet':
+            file_name = 'default_wallet'
+        else:
+            file_name = self.slug
         return f"{settings.WALLET_DIR}/{file_name}"
+
 
     def mpk_short(self):
         return f"{self.mpk[:8]}....{self.mpk[-4:]}"
+
+
+    def vendor_keygen(self):
+        '''Generates a vendor key using the SHA3-224 hashing algorithm'''
+        return hashlib.sha3_224(self.mpk.encode('utf-8')).hexdigest()
+
+
+    def load_wallet(self):
+        '''Loads the wallet in the Electrum daemon'''
+        loaded = json.loads(os.popen(f"{settings.ELECTRUM} load_wallet -w {self.path()}").read())
+        if loaded == True:
+            return loaded
+        else:
+            raise WalletLoadError
+    
+
+    def close_wallet(self):
+        '''Closes the wallet in the Electrum daemon'''
+        closed = json.loads(os.popen(f"{settings.ELECTRUM} close_wallet -w {self.path()}").read())
+        if closed == True:
+            return closed
+        else:
+            raise WalletCloseError
 
     def __str__(self):
         return self.wallet_name
@@ -56,9 +132,9 @@ class CryptoAddressManager(models.Manager):
 
         # request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
         # request = json.loads(request)
-
         # btc_address = request['address']
-        btc_address = 'bc1q40jsjcn6290mtc988uut24nx7t8n49639lyukx'
+        
+        btc_address = 'bc1q8zxq2dlfl38p5r95wl50z3tgty97hpugxjmsr7'
         crypto_address = CryptoAddress.objects.create(
             address=btc_address,
             wallet_id=wallet,
@@ -131,8 +207,17 @@ class CryptoAddress(models.Model):
         return is_paid
 
 
+    def payment_details(self):
+        '''Prepare a dict to serialize into JSON and send back to the vendor.'''
+        pay_details = {
+            'address'   : self.address,
+            'btc_due'   : self.btc_due,
+            'qr_code'   : self.qr(),
+        }
+        return pay_details
 
-    def exchange_sanity_check(self, balance):
+
+    def currency_sanity_check(self, balance):
         '''
         Checks the current exchange rate to make sure 
         there hasn't been a huge drop between the time 
@@ -149,10 +234,9 @@ class CryptoAddress(models.Model):
         return is_close
 
 
-
-    def list_addresses(self):
+    def list_addresses(self, wallet):
         '''Returns a list of all addresses in the wallet'''
-        addys = os.popen(f"{settings.ELECTRUM} listaddresses").read()
+        addys = os.popen(f"{settings.ELECTRUM} listaddresses -w {wallet.path()}").read()
         addys = decimalize(json.loads(addys))
         return addys
 

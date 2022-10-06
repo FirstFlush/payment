@@ -65,3 +65,10 @@ class Account(AbstractBaseUser):
 
     def has_module_perms(self, add_label):
         return True
+
+
+
+
+class VendorPayment(models.Model):
+    
+    date_created = models.DateTimeField(auto_now_add=True)

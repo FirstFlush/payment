@@ -1,11 +1,14 @@
 from django.db import models
 from django.conf import settings 
 
+from error.errors import PriceFetchApiFailure
+
 from requests import Session
 from requests.exceptions import ConnectionError, Timeout, TooManyRedirects
 from datetime import datetime, timedelta
 import json
 import decimal
+# import logging
 
 
 class CryptoCoin(models.Model):
@@ -36,7 +39,7 @@ class CryptoPriceManager(models.Manager):
         if latest_price == None:
             # log and also maybe put in a 3rd api call here?
             print('[NO PRICE] Gotta fetch a new price!! Making API Call')
-            CryptoPrice.objects.fetch_prices()
+            CryptoPrice.objects.coingecko()
             latest_price = CryptoPrice.objects.filter(coin_fk=coin, date_created__gt=time_threshold).last()
 
         else:
@@ -75,7 +78,7 @@ class CryptoPriceManager(models.Manager):
 
         except (ConnectionError, Timeout, TooManyRedirects) as e:
             raise e
-            # try a 3rd API? log this shit too 
+            # TODO try a 3rd API? log this shit too 
 
         print(coin_prices)
 
@@ -139,10 +142,31 @@ class CryptoPrice(models.Model):
 
     objects = CryptoPriceManager()
 
+
+    def cad_to_btc(self, cad):
+        #TODO test
+        btc = cad / self.price
+        return btc
+
+    def btc_to_cad(self, btc):
+        #TODO test
+        cad = self.price * btc
+        return cad
+
+
+    def check_time(self):
+
+        # TODO needs work lolol
+        # t = datetime.utcnow()
+        time_threshold = datetime.now() - timedelta(minutes=15)
+        if self.date_created > time_threshold:
+            print('good?')
+        else:
+            print('bad i think')
+
+
     def __str__(self):
-
         time_str = self.date_created.strftime('%B %d, %Y, %I:%M %p')
-
         return f"{self.coin_fk} - ${self.price} - {time_str}"
 
 
@@ -173,6 +197,9 @@ class PriceApiFailureManager(models.Manager):
     def fail(e, failed_api):
 
         error_str = str(type(e))[:50]
+
+        raise PriceFetchApiFailure
+
         PriceApiFailure.objects.create(
             failed_api=failed_api,
             error=error_str

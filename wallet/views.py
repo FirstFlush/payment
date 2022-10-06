@@ -9,6 +9,44 @@ from price.models import CryptoCoin, CryptoPrice
 import decimal
 
 
+
+
+@api_view(['POST'])
+@permission_classes((permissions.AllowAny,))
+def vendor_request_test(request):
+
+    if request.method != 'POST':
+        return HttpResponseBadRequest
+
+    # TODO: how to clean the data? do i treat this like a form?
+    data = request.data
+
+    wallet = get_object_or_404(CryptoWallet, vendor_key=data['api-key'])
+    cad = data['cad']
+
+    price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
+    # TODO: check to make sure price is < 15 minutes ago.
+    # TODO: if price is not less than 15 mins, raise error and do another API call i guess lol.
+
+    btc = price.cad_to_btc(decimal.Decimal(cad))
+
+    address = CryptoAddress.objects.add_request(
+        wallet=wallet,
+        cad_amount=cad,
+        btc_amount=btc
+    )
+    
+    resp = address.payment_details()
+    # TODO: Serialize this with a non-Model serializer.
+    print(resp)
+
+    address.delete()
+
+    return HttpResponse('hihihiihi')
+
+
+
+
 @api_view(['POST'])
 @permission_classes((permissions.AllowAny,))
 def notification(request):
@@ -23,7 +61,7 @@ def notification(request):
     balance = {'unconfirmed':0, 'confirmed':decimal.Decimal(0.0)}
 
     print(address.confirm_full_payment(balance))
-    print(address.exchange_sanity_check(balance))
+    print(address.currency_sanity_check(balance))
     # electrum notify POST request:
     # body = {
     #     "address"   : "bc1qkfcwrwva3s82j3m4uyv7zvvsgqk9kc36ggykw2", 
@@ -31,18 +69,6 @@ def notification(request):
 
     return HttpResponse('hihih')
 
-
-
-@api_view(['GET'])
-@permission_classes((permissions.AllowAny,))
-def get_price_test(request):
-
-    # data = request.data
-    # print(request.GET['coin'])
-    # CryptoPrice.objects.coingecko()
-    CryptoPrice.objects.coinmarketcap()
-
-    return HttpResponse('hohoho')
 
 
 

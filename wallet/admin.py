@@ -7,12 +7,14 @@ from .models import CryptoAddress, CryptoWallet
 class CryptoWalletAdmin(admin.ModelAdmin):
     
     list_display = [
+        'account_id',
         'wallet_name',
-        'slug',
+        # 'slug',
         'mpk_short',
+        'is_vendor',
     ]
 
-    prepopulated_fields = {'slug':('wallet_name',)}
+    # prepopulated_fields = {'slug':('wallet_name',)}
 
 
 class CryptoAddressAdmin(admin.ModelAdmin):
