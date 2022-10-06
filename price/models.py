@@ -9,6 +9,7 @@ import decimal
 
 
 class CryptoCoin(models.Model):
+
     coin_name       = models.CharField(max_length=50, unique=True)
     coin_name_short = models.CharField(max_length=10, unique=True)
     
@@ -73,7 +74,7 @@ class CryptoPriceManager(models.Manager):
 
 
         except (ConnectionError, Timeout, TooManyRedirects) as e:
-            print(e)
+            raise e
             # try a 3rd API? log this shit too 
 
         print(coin_prices)
@@ -130,6 +131,7 @@ class CryptoPriceManager(models.Manager):
 
 
 class CryptoPrice(models.Model):
+    '''1 BTC = self.price'''
 
     coin_fk         = models.ForeignKey(to=CryptoCoin, on_delete=models.CASCADE)
     price           = models.DecimalField(decimal_places=2, max_digits=20)

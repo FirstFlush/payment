@@ -1,5 +1,11 @@
 
 
 
-thing = 'aaaafsdafdsafdasfzzzz'
-print(f"{thing[:8]}....{thing[-4:]}")
+class MyNewException(Exception):
+    pass
+
+
+if 1 == 1:
+    raise MyNewException
+    
+

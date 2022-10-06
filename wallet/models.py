@@ -6,7 +6,9 @@ from account.models import Account
 import json
 import decimal
 import os
-
+import qrcode
+import qrcode.image.svg
+from math import isclose
 
 
 def decimalize(dictionary):
@@ -35,7 +37,9 @@ class CryptoWallet(models.Model):
 
 
     def path(self):
-        return f"{settings.WALLET_DIR}/{self.wallet_name}"
+        file_name = self.slug.replace('-','_')
+
+        return f"{settings.WALLET_DIR}/{file_name}"
 
     def mpk_short(self):
         return f"{self.mpk[:8]}....{self.mpk[-4:]}"
@@ -45,22 +49,24 @@ class CryptoWallet(models.Model):
 
 
 
+
 class CryptoAddressManager(models.Manager):
 
+    def add_request(self, wallet, cad_amount, btc_amount):
 
-    def new_address(self, wallet, cad_amount, btc_amount):
+        # request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
+        # request = json.loads(request)
 
-        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount}").read()
-        request = json.loads(request)
-
-        btc_address = request['address']
-
-        CryptoAddress.objects.create(
+        # btc_address = request['address']
+        btc_address = 'bc1q40jsjcn6290mtc988uut24nx7t8n49639lyukx'
+        crypto_address = CryptoAddress.objects.create(
             address=btc_address,
-            wallet=wallet,
+            wallet_id=wallet,
             cad_due=cad_amount,
             btc_due=btc_amount
         )
+
+        return crypto_address
 # electrum output:
 # {
 #     "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
@@ -84,10 +90,18 @@ class CryptoAddress(models.Model):
     btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
     cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
     btc_paid        = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    is_used         = models.BooleanField(default=False)
     is_paid         = models.BooleanField(default=False)
     date_created    = models.DateTimeField(auto_now_add=True)
 
     objects = CryptoAddressManager()
+
+
+    def __str__(self):
+        if self.is_used == True:
+            return f"{self.address[:8]}....{self.address[-4:]} (used)"
+        else:
+            return f"{self.address[:8]}....{self.address[-4:]}"
 
 
     def get_balance(self):
@@ -102,6 +116,38 @@ class CryptoAddress(models.Model):
         bal = decimalize(json.loads(bal))
 
         return bal
+
+
+    def confirm_full_payment(self, balance):
+        '''
+        Checks if the balance in the address is the same (or almost the same) as the balance owed.
+        **Does not check if BTC prices are the same as when the payment request was first generated!
+        Returns boolean 'is_paid'
+        '''
+        bal_conf    = balance['confirmed']
+        abs_tol = 0.000009
+
+        is_paid = isclose(bal_conf, self.btc_due, abs_tol=abs_tol)
+        return is_paid
+
+
+
+    def exchange_sanity_check(self, balance):
+        '''
+        Checks the current exchange rate to make sure 
+        there hasn't been a huge drop between the time 
+        the payment request was initiated to the time we 
+        actually received the crypto.
+        '''
+        btc_price   = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
+        bal_conf    = balance['confirmed']
+        bal_cad     = bal_conf * btc_price.price
+        is_close    =  isclose(bal_cad, self.cad_due, abs_tol=2)
+        print('CAD due: ', self.cad_due)
+        print('CAD balance: ', bal_cad)
+            
+        return is_close
+
 
 
     def list_addresses(self):
@@ -120,18 +166,28 @@ class CryptoAddress(models.Model):
             return False
 
 
+    def qr(self):
+        '''Creates an SVG QR-code for the BTC address'''
+        qr = qrcode.QRCode(
+            version=2,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=30,
+            border=4
+        )
+        qr.add_data(self.address)
+        factory = qrcode.image.svg.SvgPathImage
+        img = qr.make_image(image_factory=factory)
+        return img
 
-
-
-
-
-
-# class PriceApi(models.Model):
-
-#     name = models.CharField(max_length=255,unique=True)
-#     url = models.UrlField()
-
-
+    def save_qr(self, qr_img):
+        '''
+        Saves the QR code. I have decoupled this from self.qr() 
+        because I will probably just save on the client-side. 
+        But with multiple clients I will probably have to save 
+        server-side.
+        '''
+        qr_img.save(f"{self.address[:8]}....{self.address[-4:]}3.svg")
+        return
 
 
 

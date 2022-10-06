@@ -27,6 +27,12 @@ environ.Env.read_env()
 # MY CONSTANTS:
 ELECTRUM = '/home/baga/.local/bin/./electrum'
 WALLET_DIR = '/home/baga/.electrum/wallets'
+COINS_LONG = env('COINS_LONG')
+COINS_SHORT = env('COINS_SHORT')
+
+COINMARKETCAP_API_KEY = env('COINMARKETCAP_API_KEY')
+
+
 
 # django-cryptography module settings:
 CRYPTOGRAPHY_BACKEND = default_backend()
