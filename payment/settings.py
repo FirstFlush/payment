@@ -29,10 +29,7 @@ ELECTRUM = '/home/baga/.local/bin/./electrum'
 WALLET_DIR = '/home/baga/.electrum/wallets'
 COINS_LONG = env('COINS_LONG')
 COINS_SHORT = env('COINS_SHORT')
-
 COINMARKETCAP_API_KEY = env('COINMARKETCAP_API_KEY')
-
-
 
 # django-cryptography module settings:
 CRYPTOGRAPHY_BACKEND = default_backend()
@@ -50,18 +47,13 @@ REST_FRAMEWORK = {
     ]
 }
 
-
-
-
-
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost']
+ALLOWED_HOSTS = ['localhost','66.183.118.79']
 
 
 # Application definition
@@ -75,9 +67,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'django_extensions',
-#    'psycopg2',
+    'psycopg2',
     'wallet',
     'price',
+    'error',
     'account',
 ]
 
@@ -118,10 +111,18 @@ WSGI_APPLICATION = 'payment.wsgi.application'
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+         'default': {
+         'ENGINE'  : 'django.db.backends.sqlite3',
+         'NAME'    : BASE_DIR / 'db.sqlite3',
+     }
+#    'default': {
+#        'ENGINE'    : 'django.db.backends.postgresql_psycopg2',
+#        'NAME'      : env('DB_NAME'),
+#        'USER'      : env('DB_USER'),
+#        'PASSWORD'  : env('DB_PASSWORD'),
+#        'HOST'      : env('DB_HOST'),
+#        'PORT'      : '5432',
+  # }
 }
 
 
@@ -142,9 +143,6 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-
-
-AUTH_USER_MODEL = 'account.Account'
 
 
 # Internationalization
