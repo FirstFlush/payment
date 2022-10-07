@@ -66,7 +66,8 @@ class CryptoWalletManager(models.Manager):
             mpk=mpk
         )
 
-        restore_wallet = json.loads(os.popen(f"{settings.ELECTRUM} restore {new_wallet.mpk} -w {new_wallet.path()}").read())
+        restored_wallet = os.popen(f"{settings.ELECTRUM} restore {new_wallet.mpk} -w {new_wallet.path()}").read()
+        
         new_wallet.load_wallet()
         # os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.path()}")
         new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
@@ -95,6 +96,7 @@ class CryptoWallet(models.Model):
 
 
     def mpk_short(self):
+        '''Returns easier to read version of MPK'''
         return f"{self.mpk[:8]}....{self.mpk[-4:]}"
 
 
@@ -129,7 +131,7 @@ class CryptoWallet(models.Model):
 class CryptoAddressManager(models.Manager):
 
     def add_request(self, wallet, cad_amount, btc_amount):
-
+        # # the actual code:
         # request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
         # request = json.loads(request)
         # btc_address = request['address']
