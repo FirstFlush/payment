@@ -66,11 +66,13 @@ class CryptoWalletManager(models.Manager):
             mpk=mpk
         )
 
-        restore_wallet = json.loads(os.popen(f"{settings.ELECTRUM} restore {new_wallet.mpk} -w {new_wallet.path()}").read())
+        restored_wallet = os.popen(f"{settings.ELECTRUM} restore {new_wallet.mpk} -w {new_wallet.path()}").read()
+
         new_wallet.load_wallet()
         # os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.path()}")
-        new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
+        new_wallet.vendor_key = new_wallet.vendor_keygen()
         new_wallet.save()
+        return new_wallet
 
 
 class CryptoWallet(models.Model):
@@ -95,6 +97,7 @@ class CryptoWallet(models.Model):
 
 
     def mpk_short(self):
+        '''Returns easier to read version of MPK'''
         return f"{self.mpk[:8]}....{self.mpk[-4:]}"
 
 
@@ -110,7 +113,7 @@ class CryptoWallet(models.Model):
             return loaded
         else:
             raise WalletLoadError
-    
+
 
     def close_wallet(self):
         '''Closes the wallet in the Electrum daemon'''
@@ -129,18 +132,27 @@ class CryptoWallet(models.Model):
 class CryptoAddressManager(models.Manager):
 
     def add_request(self, wallet, cad_amount, btc_amount):
-
-        # request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
-        # request = json.loads(request)
-        # btc_address = request['address']
-        
-        btc_address = 'bc1q8zxq2dlfl38p5r95wl50z3tgty97hpugxjmsr7'
+        # # the actual code:-------------------
+        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
+        request = json.loads(request)
+        btc_address = request['address']
+        print(request)
+        print('-------------------------')
+        print(request['address'])        
         crypto_address = CryptoAddress.objects.create(
             address=btc_address,
             wallet_id=wallet,
             cad_due=cad_amount,
             btc_due=btc_amount
         )
+        # ## This part is just for testing purposes:
+#        btc_address = 'bc1q7krer4mr04gxzrcd7my9remeyhfqc9xq8605tv'
+#        crypto_address = CryptoAddress.objects.create(
+#            address=btc_address,
+#            wallet_id=wallet,
+#            cad_due=cad_amount,
+#            btc_due=btc_amount
+#        )
 
         return crypto_address
 # electrum output:
@@ -272,6 +284,7 @@ class CryptoAddress(models.Model):
         '''
         qr_img.save(f"{self.address[:8]}....{self.address[-4:]}3.svg")
         return
+
 
 
 
