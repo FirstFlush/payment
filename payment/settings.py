@@ -29,10 +29,7 @@ ELECTRUM = '/home/baga/.local/bin/./electrum'
 WALLET_DIR = '/home/baga/.electrum/wallets'
 COINS_LONG = env('COINS_LONG')
 COINS_SHORT = env('COINS_SHORT')
-
 COINMARKETCAP_API_KEY = env('COINMARKETCAP_API_KEY')
-
-
 
 # django-cryptography module settings:
 CRYPTOGRAPHY_BACKEND = default_backend()
@@ -50,11 +47,6 @@ REST_FRAMEWORK = {
     ]
 }
 
-
-
-
-
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
 
@@ -63,7 +55,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['localhost']
 
-APPEND_SLASH = False
+#APPEND_SLASH = False
 
 # Application definition
 
@@ -76,9 +68,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'django_extensions',
-#    'psycopg2',
+    'psycopg2',
     'wallet',
     'price',
+    'error',
     'account',
 ]
 
@@ -153,9 +146,6 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-AUTH_USER_MODEL = 'account.Account'
-
-
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
 
@@ -191,4 +181,3 @@ from django.contrib.messages import constants as messages
 MESSAGE_TAGS= {
     messages.ERROR: 'danger',
 }
-

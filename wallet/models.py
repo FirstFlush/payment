@@ -132,13 +132,15 @@ class CryptoWallet(models.Model):
 class CryptoAddressManager(models.Manager):
 
     def add_request(self, wallet, cad_amount, btc_amount):
-        # # the actual code:-------------------
+
+        # TESTING:
+        btc_address = 'bc1q7krer4mr04gxzrcd7my9remeyhfqc9xq8605tv'
+
+        # PRODUCTION:
         # request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
         # request = json.loads(request)
         # btc_address = request['address']
         
-        # ## This part is just for testing purposes:
-        btc_address = 'bc1q7krer4mr04gxzrcd7my9remeyhfqc9xq8605tv'
         crypto_address = CryptoAddress.objects.create(
             address=btc_address,
             wallet_id=wallet,

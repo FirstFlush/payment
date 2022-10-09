@@ -41,6 +41,12 @@ class WalletRestoreError(Exception):
     '''Raised when 'electrum restore' command fails.'''
     pass
 
+class ElectrumException(Exception):
+    '''General electrum error'''
+    pass
+
+
+
 
 
 # class UnderPayment(Exception):

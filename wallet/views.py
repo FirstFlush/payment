@@ -22,6 +22,8 @@ def vendor_request_test(request):
     # TODO: how to clean the data? do i treat this like a form?
     data = request.data
     wallet = get_object_or_404(CryptoWallet, vendor_key=data['api-key'])
+    
+    # Poduction:
     # wallet.load_wallet()
     cad = data['cad']
 
@@ -38,11 +40,10 @@ def vendor_request_test(request):
 
     resp = address.payment_details()
 
-    # resp['btc_due'] = round(float(resp['btc_due']), 7)
-    # resp['qr_code'] = 'pretend its a QR image svg. wow look at that'
+    # for thing in dir(request):
+    #     print(thing)
+    print(request.stream)
 
-
-    # TODO: Serialize this with a non-Model serializer.
     serializer = NewAddressSerializer(resp)
 
     address.delete()
