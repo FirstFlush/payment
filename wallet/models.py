@@ -13,6 +13,7 @@ import os
 import qrcode
 import qrcode.image.svg
 from math import isclose
+from jsonrpclib import Server
 import hashlib
 
 
@@ -108,39 +109,36 @@ class CryptoWallet(models.Model):
 
     def load_wallet(self):
         '''Loads the wallet in the Electrum daemon'''
-        loaded = json.loads(os.popen(f"{settings.ELECTRUM} load_wallet -w {self.path()}").read())
-        if loaded == True:
-            return loaded
-        else:
-            raise WalletLoadError
-
+        server = Server('http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777')
+        print(server.load_wallet(wallet_path=self.path()))
+        return
 
     def close_wallet(self):
         '''Closes the wallet in the Electrum daemon'''
-        closed = json.loads(os.popen(f"{settings.ELECTRUM} close_wallet -w {self.path()}").read())
-        if closed == True:
-            return closed
-        else:
-            raise WalletCloseError
+        server = Server('http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777')
+        print(server.close_wallet(wallet_path=self.path()))
+        return
 
     def __str__(self):
         return self.wallet_name
 
 
+    def listaddresses(self):
+        '''Returns a list of all addresses in the wallet'''
+
+        server = Server('http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777')
+        addresses = server.listaddresses(wallet=self.path())
+        return addresses
 
 
 class CryptoAddressManager(models.Manager):
 
     def add_request(self, wallet, cad_amount, btc_amount):
+        # # the actual code:-------------------
+        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
+        request = json.loads(request)
+        btc_address = request['address']
 
-        # TESTING:
-        btc_address = 'bc1q7krer4mr04gxzrcd7my9remeyhfqc9xq8605tv'
-
-        # PRODUCTION:
-        # request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
-        # request = json.loads(request)
-        # btc_address = request['address']
-        
         crypto_address = CryptoAddress.objects.create(
             address=btc_address,
             wallet_id=wallet,
@@ -238,13 +236,6 @@ class CryptoAddress(models.Model):
         print('CAD balance: ', bal_cad)
             
         return is_close
-
-
-    def list_addresses(self, wallet):
-        '''Returns a list of all addresses in the wallet'''
-        addys = os.popen(f"{settings.ELECTRUM} listaddresses -w {wallet.path()}").read()
-        addys = decimalize(json.loads(addys))
-        return addys
 
 
     def notify(self, url=str):

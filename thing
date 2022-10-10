@@ -1,0 +1,1 @@
+curl --data-binary '{"jsonrpc":"2.0","id":"curltext","method":"listaddresses","params":{"wallet":"/home/baga/.electrum/wallets/greatkart-wallet"}}' http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777

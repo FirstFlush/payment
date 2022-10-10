@@ -22,9 +22,7 @@ def vendor_request_test(request):
     # TODO: how to clean the data? do i treat this like a form?
     data = request.data
     wallet = get_object_or_404(CryptoWallet, vendor_key=data['api-key'])
-    
-    # Poduction:
-    # wallet.load_wallet()
+    wallet.load_wallet()
     cad = data['cad']
 
     price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
@@ -38,15 +36,12 @@ def vendor_request_test(request):
         btc_amount=btc
     )
 
-    resp = address.payment_details()
+    wallet.close_wallet()
 
-    # for thing in dir(request):
-    #     print(thing)
-    print(request.stream)
+    data = address.payment_details()
+    serializer = NewAddressSerializer(data)
 
-    serializer = NewAddressSerializer(resp)
-
-    address.delete()
+    # address.delete()
 
     return Response(serializer.data)
 
