@@ -36,6 +36,7 @@ def vendor_request_test(request):
         btc_amount=btc
     )
 
+    address.notify('http://localhost:8000/wallet_api/notify/')
     wallet.close_wallet()
 
     data = address.payment_details()
@@ -56,13 +57,13 @@ def notification(request):
         return HttpResponseBadRequest
     
     data = request.data
+    print(data)
+    # address = get_object_or_404(CryptoAddress, address=data['address'])
 
-    address = get_object_or_404(CryptoAddress, address=data['address'])
-    
-    balance = {'unconfirmed':0, 'confirmed':decimal.Decimal(0.0)}
+    # balance = {'unconfirmed':0, 'confirmed':decimal.Decimal(0.0)}
 
-    print(address.confirm_full_payment(balance))
-    print(address.currency_sanity_check(balance))
+    # print(address.confirm_full_payment(balance))
+    # print(address.currency_sanity_check(balance))
     # electrum notify POST request:
     # body = {
     #     "address"   : "bc1qkfcwrwva3s82j3m4uyv7zvvsgqk9kc36ggykw2", 

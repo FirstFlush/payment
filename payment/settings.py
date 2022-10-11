@@ -27,6 +27,7 @@ environ.Env.read_env()
 # MY CONSTANTS:
 ELECTRUM = '/home/baga/.local/bin/./electrum'
 WALLET_DIR = '/home/baga/.electrum/wallets'
+JSON_RPC = f"http://{env('RPC_USER')}:{env('RPC_PASS')}@127.0.0.1:{env('RPC_PORT')}"
 COINS_LONG = env('COINS_LONG')
 COINS_SHORT = env('COINS_SHORT')
 COINMARKETCAP_API_KEY = env('COINMARKETCAP_API_KEY')

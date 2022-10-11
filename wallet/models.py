@@ -1,3 +1,4 @@
+from distutils.util import byte_compile
 from django.db import models
 from django.conf import settings
 from django_cryptography.fields import encrypt
@@ -109,15 +110,17 @@ class CryptoWallet(models.Model):
 
     def load_wallet(self):
         '''Loads the wallet in the Electrum daemon'''
-        server = Server('http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777')
+        server = Server(settings.JSON_RPC)
         print(server.load_wallet(wallet_path=self.path()))
         return
 
+
     def close_wallet(self):
         '''Closes the wallet in the Electrum daemon'''
-        server = Server('http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777')
+        server = Server(settings.JSON_RPC)
         print(server.close_wallet(wallet_path=self.path()))
         return
+
 
     def __str__(self):
         return self.wallet_name
@@ -125,8 +128,7 @@ class CryptoWallet(models.Model):
 
     def listaddresses(self):
         '''Returns a list of all addresses in the wallet'''
-
-        server = Server('http://user:1psSZ0c211JJr-M73-IHSw==@127.0.0.1:7777')
+        server = Server(settings.JSON_RPC)
         addresses = server.listaddresses(wallet=self.path())
         return addresses
 
@@ -134,9 +136,12 @@ class CryptoWallet(models.Model):
 class CryptoAddressManager(models.Manager):
 
     def add_request(self, wallet, cad_amount, btc_amount):
-        # # the actual code:-------------------
-        request = os.popen(f"{settings.ELECTRUM} add_request {btc_amount} -w {wallet.path()}").read()
-        request = json.loads(request)
+        '''Takes wallet object, BTC/CAD amounts. Returns a new CryptoAddress by JSON RPC call.'''
+        server = Server(settings.JSON_RPC)
+        request = server.add_request(amount=float(btc_amount), wallet=wallet.path())
+
+        print(request)
+
         btc_address = request['address']
 
         crypto_address = CryptoAddress.objects.create(
@@ -147,7 +152,7 @@ class CryptoAddressManager(models.Manager):
         )
 
         return crypto_address
-# electrum output:
+# electrum response:
 # {
 #     "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
 #     "address": "bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u",
@@ -192,10 +197,29 @@ class CryptoAddress(models.Model):
             'unconfirmed' : 0,
         }
         '''
-        bal = os.popen(f"{settings.ELECTRUM} getaddressbalance {self.address}").read()
-        bal = decimalize(json.loads(bal))
+        server = Server(settings.JSON_RPC)
+        balance = server.getaddressbalance(self.address)
 
-        return bal
+        return balance
+
+
+    def notify(self, url=str):
+        '''Electrum notify command. Returns boolean'''
+        # TODO url = reverse(this function does some urls.py shit)
+        # if json.loads(os.popen(f"{settings.ELECTRUM} notify {self.address} {url}").read()) == True:
+            # return True
+        # else:
+            # return False
+        server = Server(settings.JSON_RPC)
+        notification =server.notify(self.address, url)
+        return notification
+
+
+    def notify_stop(self):
+        '''Stops the notification on an address.'''
+        server = Server(settings.JSON_RPC)
+        notification =server.notify(self.address)
+        return notification
 
 
     def confirm_full_payment(self, balance):
@@ -204,10 +228,10 @@ class CryptoAddress(models.Model):
         **Does not check if BTC prices are the same as when the payment request was first generated!
         Returns boolean 'is_paid'
         '''
-        bal_conf    = balance['confirmed']
+        bal_confirmed    = balance['confirmed']
         abs_tol = 0.000009
 
-        is_paid = isclose(bal_conf, self.btc_due, abs_tol=abs_tol)
+        is_paid = isclose(bal_confirmed, self.btc_due, abs_tol=abs_tol)
         return is_paid
 
 
@@ -238,15 +262,6 @@ class CryptoAddress(models.Model):
         return is_close
 
 
-    def notify(self, url=str):
-        '''Electrum notify command. Returns boolean'''
-        # TODO url = reverse(this function does some urls.py shit)
-        if json.loads(os.popen(f"{settings.ELECTRUM} notify {self.address} {url}").read()) == True:
-            return True
-        else:
-            return False
-
-
     def qr(self):
         '''Creates an SVG QR-code for the BTC address'''
         qr = qrcode.QRCode(
@@ -254,7 +269,7 @@ class CryptoAddress(models.Model):
             error_correction=qrcode.constants.ERROR_CORRECT_L,
             box_size=30,
             border=4
-        )
+        ) 
         qr.add_data(self.address)
         factory = qrcode.image.svg.SvgPathImage
         img = qr.make_image(image_factory=factory)
@@ -272,10 +287,10 @@ class CryptoAddress(models.Model):
 
 
 
+# class PaymentRequest(models.Model):
 
-
-
-
+#     address_id = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+#     btc_due    = models.
 
 
 
