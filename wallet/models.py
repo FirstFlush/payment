@@ -128,59 +128,25 @@ class CryptoWallet(models.Model):
 
     def listaddresses(self):
         '''Returns a list of all addresses in the wallet'''
+        self.load_wallet()
         server = Server(settings.JSON_RPC)
         addresses = server.listaddresses(wallet=self.path())
+        self.close_wallet()
         return addresses
-
-
-class CryptoAddressManager(models.Manager):
-
-    def add_request(self, wallet, cad_amount, btc_amount):
-        '''Takes wallet object, BTC/CAD amounts. Returns a new CryptoAddress by JSON RPC call.'''
-        server = Server(settings.JSON_RPC)
-        request = server.add_request(amount=float(btc_amount), wallet=wallet.path())
-
-        print(request)
-
-        btc_address = request['address']
-
-        crypto_address = CryptoAddress.objects.create(
-            address=btc_address,
-            wallet_id=wallet,
-            cad_due=cad_amount,
-            btc_due=btc_amount
-        )
-
-        return crypto_address
-# electrum response:
-# {
-#     "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
-#     "address": "bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u",
-#     "amount_BTC": "0.00027921",
-#     "amount_sat": 27921,
-#     "expiration": 3600,
-#     "is_lightning": false,
-#     "message": "",
-#     "status": 0,
-#     "status_str": "Expires in about 1 hour",
-#     "timestamp": 1664956697
-# }
-
 
 
 class CryptoAddress(models.Model):
 
     wallet_id       = models.ForeignKey(to=CryptoWallet, on_delete=models.CASCADE, null=True, blank=True)
     address         = models.CharField(max_length=255, unique=True)
-    btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
-    cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
-    btc_paid        = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    # btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
+    # cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
+    # btc_paid        = models.DecimalField(decimal_places=7, max_digits=10, default=0)
     is_used         = models.BooleanField(default=False)
-    is_paid         = models.BooleanField(default=False)
+    # is_paid         = models.BooleanField(default=False)
     date_created    = models.DateTimeField(auto_now_add=True)
 
-    objects = CryptoAddressManager()
-
+    # objects = CryptoAddressManager()
 
     def __str__(self):
         if self.is_used == True:
@@ -235,16 +201,6 @@ class CryptoAddress(models.Model):
         return is_paid
 
 
-    def payment_details(self):
-        '''Prepare a dict to serialize into JSON and send back to the vendor.'''
-        pay_details = {
-            'address'   : self.address,
-            'btc_due'   : self.btc_due,
-            'qr_code'   : self.qr(),
-        }
-        return pay_details
-
-
     def currency_sanity_check(self, balance):
         '''
         Checks the current exchange rate to make sure 
@@ -286,11 +242,108 @@ class CryptoAddress(models.Model):
         return
 
 
+class RequestManager(models.Manager):
 
-# class PaymentRequest(models.Model):
+    def add_request(self, wallet, cad_amount, btc_amount):
+        '''
+        Takes wallet object, btc owed, cad owed. Returns a new PaymentRequest instance via JSON RPC call.
+        {
+            "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
+            "address": "bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u",
+            "amount_BTC": "0.00027921",
+            "amount_sat": 27921,
+            "expiration": 3600,
+            "is_lightning": false,
+            "message": "",
+            "status": 0,
+            "status_str": "Expires in about 1 hour",
+            "timestamp": 1664956697
+        }
+        '''
+        server = Server(settings.JSON_RPC)
+        request = server.add_request(amount=float(btc_amount), wallet=wallet.path())
 
-#     address_id = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
-#     btc_due    = models.
+        print(request)
+
+        address_hex = request['address']
+
+        # get_or_create() returns a tuple of (ModelInstance, Boolean) 
+        crypto_address = CryptoAddress.objects.get_or_create(
+            address=address_hex,
+            wallet_id=wallet,
+        ) 
+
+        payment_request = PaymentRequest.objects.create(
+            address_id=crypto_address[0],
+            btc_due=btc_amount,
+            cad_due=cad_amount,
+        )
+
+        return payment_request
+
+
+class PaymentRequest(models.Model):
+
+    address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+    btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
+    cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
+    is_paid         = models.BooleanField(default=False)
+    date_created    = models.DateTimeField(auto_now_add=True)
+
+    objects = RequestManager()
+
+    def __str__(self):
+        address = self.address_id.address
+        return f"{address[:8]}...{address[-4:]}: $ {self.cad_due}"
+
+
+    def payment_details(self):
+        '''
+        Method returns a dictionary of payment request details.
+        *This is what gets sent back to the vendor when a customer is checking out.
+        '''
+        pay_details = {
+            'address'       : self.address_id.address,
+            'btc_due'       : self.btc_due,
+            # 'qr_code'       : self.qr(),
+            'date_created'  : self.date_created
+        }
+        return pay_details
+
+
+class AddressNotification(models.Model):
+
+    address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+    btc_unconfirmed = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    date_created    = models.DateTimeField(auto_now_add=True)
+
+
+
+# class PaymentManager(models.Manager):
+
+#     def check_balance(balance=dict):
+#         '''Takes dict and returns Payment model instance or updates payment model instance'''
+#         Payment.ojects.
+
+
+
+class Payment(models.Model):
+
+    # request_id = models.ForeignKey(to=PaymentRequest, on_delete=models.CASCADE)
+    address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+    btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    cad_exchange    = models.DecimalField(decimal_places=2, max_digits=10, default=0)
+    date_created    = models.DateTimeField(auto_now_add=True)
+
+    # objects = PaymentManager()
+
+
+
+
+
+
+
 
 
 
