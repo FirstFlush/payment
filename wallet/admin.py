@@ -22,11 +22,6 @@ class CryptoAddressAdmin(admin.ModelAdmin):
     list_display = [
         'wallet_id',
         'address',
-        # 'btc_due',
-        # 'cad_due',
-        # 'btc_paid',
-        'is_used',
-        # 'is_paid',
         'date_created',
     ]
     list_filter = [

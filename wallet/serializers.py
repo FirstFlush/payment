@@ -1,10 +1,11 @@
 from rest_framework import serializers
+from .models import PaymentRequest, Payment
 
 
+class PayRequestSerializer(serializers.ModelSerializer):
 
-class NewAddressSerializer(serializers.Serializer):
-
-    address         = serializers.CharField(max_length=255)
-    btc_due         = serializers.DecimalField(max_digits=20, decimal_places=7)
-    date_created    = serializers.DateTimeField()
-    # qr_code = serializers.CharField()
+    class Meta:
+        model = PaymentRequest
+        fields = '__all__'
+        depth = 1
+        # exclude = ['btc_due']

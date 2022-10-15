@@ -24,5 +24,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('wallet_api/', include('wallet.urls')),
     path('price_api/', include('price.urls')),
-    path('api-auth/', include('rest_framework.urls')),
+    path('auth/', include('knox.urls')),
+    # url(r'auth/', include('knox.urls')),
+
+    # path('api-auth/', include('rest_framework.urls')),
 ] #+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

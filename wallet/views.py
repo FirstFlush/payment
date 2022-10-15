@@ -3,55 +3,93 @@ from django.http import HttpResponseBadRequest, HttpResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions
 from rest_framework.response import Response
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication, TokenAuthentication
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 
 from .models import AddressNotification, CryptoAddress, CryptoWallet, PaymentRequest, Payment
-from .serializers import NewAddressSerializer
+from .serializers import PayRequestSerializer
 from price.models import CryptoCoin, CryptoPrice
 
 import decimal
 import json
 
-
-@api_view(['POST'])
-@permission_classes((permissions.AllowAny,))
-def vendor_request_test(request):
-
-    if request.method != 'POST':
-        return HttpResponseBadRequest
-
-    # get wallet:
-    # TODO: how to clean the data? do i treat this like a form?
-    data = request.data
-    wallet = get_object_or_404(CryptoWallet, vendor_key=data['api-key'])
-    wallet.load_wallet()
-    cad_price = data['cad']
-
-    # get price:
-    # TODO: check to make sure price is < 15 minutes ago.
-    # TODO: if price is not less than 15 mins, raise error and do another API call 
-    price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
-    btc_price = price.cad_to_btc(decimal.Decimal(cad_price))
-    
-    # create address and request:
-    payment_request = PaymentRequest.objects.add_request(
-        wallet=wallet,
-        cad_amount=cad_price,
-        btc_amount=btc_price
-    )
-    address = payment_request.address_id
-
-    # set up notification and close wallet.
-    address.notify('http://localhost:8000/wallet_api/notification/')
-    wallet.close_wallet()
-
-    data = payment_request.payment_details()
-    serializer = NewAddressSerializer(data)
-
-    # address.delete()
-
-    return Response(serializer.data)
+from django.conf import settings
+from jsonrpclib import Server
 
 
+
+class PayRequestView(APIView):
+    authentication_classes = [TokenAuthentication,]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        
+        data = request.data
+        wallet = get_object_or_404(CryptoWallet, slug='greatkart-wallet')
+
+        wallet.load_wallet()
+        cad_price = data['cad']
+        #TODO: add datetime in request.data! so we can compare it to datetime of first address notification
+
+        # get price:
+        # TODO: check to make sure price is < 15 minutes ago.
+        # TODO: if price is not less than 15 mins, raise error and do another API call 
+        price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
+        btc_price = price.cad_to_btc(decimal.Decimal(cad_price))
+        
+        server = Server(settings.JSON_RPC)
+        electrum_request = server.add_request(amount=float(btc_price), wallet=wallet.path(), force=True)
+
+        address = CryptoAddress.objects.get_or_create(
+            wallet_id=wallet,
+            address=electrum_request['address']
+        )[0]
+        pr = PaymentRequest.objects.create(
+            address_id = address,
+            btc_due = btc_price,
+            cad_due = cad_price,
+        )
+
+        # stop notification:
+        # server = Server(settings.JSON_RPC)
+        # server.notify(address=address.address, URL='')
+        # set up notification
+        print('-'*50)
+        print('notify: ', address.notify('http://localhost:8000/wallet_api/notify/'))
+        print('-'*50)
+
+        # data = payment_request.payment_details()
+        serializer = PayRequestSerializer(pr)
+
+        # address.delete()
+
+        return Response(serializer.data)
+
+
+
+class NotifyView(APIView):
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        print('NotifyView data: ', data)
+
+        address = get_object_or_404(CryptoAddress, address=data['address'])
+        wallet = get_object_or_404(CryptoWallet, id=address.wallet_id.id)
+        wallet.load_wallet()
+        balance = address.get_balance()
+
+        AddressNotification.objects.create(
+            address_id = address,
+            btc_unconfirmed = balance['unconfirmed'],
+            btc_confirmed = balance['confirmed']
+        )  
+        return Response()
 
 
 @api_view(['POST'])
@@ -84,6 +122,55 @@ def notification(request):
     #     "status"    : "3742b7c6e559d347734a4c4cdd40fded22458fd6b43f9a2f78d61a990c5ca712"},
 
     return HttpResponse('hihih')
+
+
+
+
+
+
+# @api_view(['POST'])
+# @permission_classes((permissions.AllowAny,))
+# def vendor_request_test(request):
+
+#     if request.method != 'POST':
+#         return HttpResponseBadRequest
+
+#     # get wallet:
+#     # TODO: how to clean the data? do i treat this like a form?
+#     data = request.data
+#     wallet = get_object_or_404(CryptoWallet, vendor_key=data['api-key'])
+#     wallet.load_wallet()
+#     cad_price = data['cad']
+
+#     # get price:
+#     # TODO: check to make sure price is < 15 minutes ago.
+#     # TODO: if price is not less than 15 mins, raise error and do another API call 
+#     price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
+#     btc_price = price.cad_to_btc(decimal.Decimal(cad_price))
+    
+#     # create address and request:
+#     payment_request = PaymentRequest.objects.add_request(
+#         wallet=wallet,
+#         cad_amount=cad_price,
+#         btc_amount=btc_price
+#     )
+#     address = payment_request.address_id
+
+#     # set up notification and close wallet.
+#     address.notify('http://localhost:8000/wallet_api/notification/')
+#     wallet.close_wallet()
+
+#     data = payment_request.payment_details()
+#     serializer = PayRequestSerializer(data)
+
+#     # address.delete()
+
+#     return Response(serializer.data)
+
+
+
+
+
 
 
 

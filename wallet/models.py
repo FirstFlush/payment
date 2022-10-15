@@ -51,7 +51,7 @@ class CryptoWalletManager(models.Manager):
         os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.slug}")
         # new_wallet.mpk = json.loads(os.popen(f"{settings.ELECTRUM} getmpk -w {new_wallet.slug}").read())
         new_wallet.load_wallet()
-        new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
+        # new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
         new_wallet.save()
 
         return new_wallet
@@ -72,7 +72,7 @@ class CryptoWalletManager(models.Manager):
 
         new_wallet.load_wallet()
         # os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.path()}")
-        new_wallet.vendor_key = new_wallet.vendor_keygen()
+        # new_wallet.vendor_key = new_wallet.vendor_keygen()
         new_wallet.save()
         return new_wallet
 
@@ -81,7 +81,7 @@ class CryptoWallet(models.Model):
 
     account_id  = models.ForeignKey(to=Account, on_delete=models.CASCADE)
     wallet_name = models.CharField(max_length=255, unique=True)
-    vendor_key  = models.CharField(max_length=255, unique=True)
+    # vendor_key  = models.CharField(max_length=255, unique=True)
     mpk         = models.CharField(max_length=255, unique=True)
     slug        = models.SlugField(max_length=255, unique=True)
     is_vendor   = models.BooleanField(default=False)
@@ -103,22 +103,22 @@ class CryptoWallet(models.Model):
         return f"{self.mpk[:8]}....{self.mpk[-4:]}"
 
 
-    def vendor_keygen(self):
-        '''Generates a vendor key using the SHA3-224 hashing algorithm'''
-        return hashlib.sha3_224(self.mpk.encode('utf-8')).hexdigest()
+    # def vendor_keygen(self):
+    #     '''Generates a vendor key using the SHA3-224 hashing algorithm'''
+    #     return hashlib.sha3_224(self.mpk.encode('utf-8')).hexdigest()
 
 
     def load_wallet(self):
         '''Loads the wallet in the Electrum daemon'''
         server = Server(settings.JSON_RPC)
-        print(server.load_wallet(wallet_path=self.path()))
+        server.load_wallet(wallet_path=self.path())
         return
 
 
     def close_wallet(self):
         '''Closes the wallet in the Electrum daemon'''
         server = Server(settings.JSON_RPC)
-        print(server.close_wallet(wallet_path=self.path()))
+        server.close_wallet(wallet_path=self.path())
         return
 
 
@@ -130,20 +130,18 @@ class CryptoWallet(models.Model):
         '''Returns a list of all addresses in the wallet'''
         self.load_wallet()
         server = Server(settings.JSON_RPC)
-        addresses = server.listaddresses(wallet=self.path())
+        addys = server.listaddresses(wallet=self.path())
         self.close_wallet()
-        return addresses
+        return addys
+
+
 
 
 class CryptoAddress(models.Model):
 
     wallet_id       = models.ForeignKey(to=CryptoWallet, on_delete=models.CASCADE, null=True, blank=True)
     address         = models.CharField(max_length=255, unique=True)
-    # btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
-    # cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
-    # btc_paid        = models.DecimalField(decimal_places=7, max_digits=10, default=0)
-    is_used         = models.BooleanField(default=False)
-    # is_paid         = models.BooleanField(default=False)
+    # is_used         = models.BooleanField(default=False)
     date_created    = models.DateTimeField(auto_now_add=True)
 
     # objects = CryptoAddressManager()
@@ -261,25 +259,26 @@ class RequestManager(models.Manager):
         }
         '''
         server = Server(settings.JSON_RPC)
-        request = server.add_request(amount=float(btc_amount), wallet=wallet.path())
+        request = server.add_request(amount=float(btc_amount), wallet=wallet.path(), force=True)
+        return request
 
-        print(request)
 
-        address_hex = request['address']
+        # address_hex = request['address']
+        # print('address_hex :', address_hex)
 
-        # get_or_create() returns a tuple of (ModelInstance, Boolean) 
-        crypto_address = CryptoAddress.objects.get_or_create(
-            address=address_hex,
-            wallet_id=wallet,
-        ) 
+        # # get_or_create() returns a tuple of (ModelInstance, Boolean) 
+        # crypto_address = CryptoAddress.objects.get_or_create(
+        #     address=address_hex,
+        #     wallet_id=wallet,
+        # ) 
 
-        payment_request = PaymentRequest.objects.create(
-            address_id=crypto_address[0],
-            btc_due=btc_amount,
-            cad_due=cad_amount,
-        )
+        # payment_request = PaymentRequest.objects.create(
+        #     address_id=crypto_address[0],
+        #     btc_due=btc_amount,
+        #     cad_due=cad_amount,
+        # )
 
-        return payment_request
+        # return payment_request
 
 
 class PaymentRequest(models.Model):
@@ -337,6 +336,11 @@ class Payment(models.Model):
     date_created    = models.DateTimeField(auto_now_add=True)
 
     # objects = PaymentManager()
+
+    def stop_notify(self):
+        
+        server = Server(settings.JSON_RPC)
+        server.notify(address=self.address_id.address)
 
 
 
