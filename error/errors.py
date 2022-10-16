@@ -21,9 +21,9 @@ class SeriousOverPayment(Exception):
     pass
 
 
-class CryptoAddressUniqueConstraintFailed(Exception):
-    '''Raised when a new CryptoAddress fails to create because the address is already in the DB'''    
-    pass
+# class CryptoAddressUniqueConstraintFailed(Exception):
+#     '''Raised when a new CryptoAddress fails to create because the address is already in the DB'''    
+#     pass
 
 class WalletLoadError(Exception):
     '''Raised when a wallet fails to laod with the 'electrum load_wallet' command'''

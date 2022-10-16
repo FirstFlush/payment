@@ -111,7 +111,7 @@ class CryptoWallet(models.Model):
     def load_wallet(self):
         '''Loads the wallet in the Electrum daemon'''
         server = Server(settings.JSON_RPC)
-        server.load_wallet(wallet_path=self.path())
+        server.load_wallet(wallet_path=self.path(), password=settings.WALLET_PASS)
         return
 
 
@@ -169,11 +169,8 @@ class CryptoAddress(models.Model):
 
     def notify(self, url=str):
         '''Electrum notify command. Returns boolean'''
-        # TODO url = reverse(this function does some urls.py shit)
-        # if json.loads(os.popen(f"{settings.ELECTRUM} notify {self.address} {url}").read()) == True:
-            # return True
-        # else:
-            # return False
+        # TODO pass in address.. url = reverse(this function does some urls.py shit)
+
         server = Server(settings.JSON_RPC)
         notification =server.notify(self.address, url)
         return notification
@@ -186,17 +183,17 @@ class CryptoAddress(models.Model):
         return notification
 
 
-    def confirm_full_payment(self, balance):
-        '''
-        Checks if the balance in the address is the same (or almost the same) as the balance owed.
-        **Does not check if BTC prices are the same as when the payment request was first generated!
-        Returns boolean 'is_paid'
-        '''
-        bal_confirmed    = balance['confirmed']
-        abs_tol = 0.000009
+    # def confirm_full_payment(self, balance):
+    #     '''
+    #     Checks if the balance in the address is the same (or almost the same) as the balance owed.
+    #     **Does not check if BTC prices are the same as when the payment request was first generated!
+    #     Returns boolean 'is_paid'
+    #     '''
+    #     bal_confirmed    = balance['confirmed']
+    #     abs_tol = 0.000009
 
-        is_paid = isclose(bal_confirmed, self.btc_due, abs_tol=abs_tol)
-        return is_paid
+    #     is_paid = isclose(bal_confirmed, self.btc_due, abs_tol=abs_tol)
+    #     return is_paid
 
 
     def currency_sanity_check(self, balance):
@@ -231,10 +228,8 @@ class CryptoAddress(models.Model):
 
     def save_qr(self, qr_img):
         '''
-        Saves the QR code. I have decoupled this from self.qr() 
-        because I will probably just save on the client-side. 
-        But with multiple clients I will probably have to save 
-        server-side.
+        Saves the QR code. Returns nothing. I have decoupled this from self.qr() because I will probably 
+        just save on the client-side. But with multiple clients I will probably have to save server-side.
         '''
         qr_img.save(f"{self.address[:8]}....{self.address[-4:]}3.svg")
         return
@@ -284,6 +279,7 @@ class RequestManager(models.Manager):
 class PaymentRequest(models.Model):
 
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+    price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
     btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
     cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
     is_paid         = models.BooleanField(default=False)
@@ -296,11 +292,19 @@ class PaymentRequest(models.Model):
         return f"{address[:8]}...{address[-4:]}: $ {self.cad_due}"
 
 
-    def payment_details(self):
-        '''
+    def cad_min_allowance(self):
+        """
+        Returns decimal.
+        """
+        min_allowed_payment = self.cad_due * decimal.Decimal(settings.CAD_ALLOWANCE)
+        return min_allowed_payment
+
+
+    def details(self):
+        """
         Method returns a dictionary of payment request details.
         *This is what gets sent back to the vendor when a customer is checking out.
-        '''
+        """
         pay_details = {
             'address'       : self.address_id.address,
             'btc_due'       : self.btc_due,
@@ -318,29 +322,82 @@ class AddressNotification(models.Model):
     date_created    = models.DateTimeField(auto_now_add=True)
 
 
+    def check_full_payment(self):
+        """
+        Returns bool. Checks if the btc_confirmed is >= to btc_due.
+        *Confirms we received correct amount of BTC. Does NOT confirm 
+        if currency conversion is wthin an acceptable range!
+        """
+        pay_request = PaymentRequest.objects.filter(address_id=self.address_id).last()
+        if pay_request.btc_due >= self.btc_confirmed:
+            pay_request.is_paid = True
+            pay_request.save()
+            return True
+        return False
 
-# class PaymentManager(models.Manager):
 
-#     def check_balance(balance=dict):
-#         '''Takes dict and returns Payment model instance or updates payment model instance'''
-#         Payment.ojects.
+    def stop_notify(self):
+        """
+        Returns nothing.
+        Stops the notification monitoring of an address.
+        """        
+        server = Server(settings.JSON_RPC)
+        server.notify(address=self.address_id.address)
 
+
+
+
+class PaymentManager(models.Manager):
+
+
+    def payment_received(self, address, btc):
+        """Creates a new Payment instance"""
+        price = CryptoPrice.objects.filter(coin_id__coin_name='bitcoin').last()
+        cad = price.btc_to_cad(btc)
+
+        new_payment = Payment.objects.create(
+            address_id = address,
+            price_id = price,
+            btc_confirmed = btc,
+            cad_exchange = cad
+        )
+        return new_payment
 
 
 class Payment(models.Model):
 
     # request_id = models.ForeignKey(to=PaymentRequest, on_delete=models.CASCADE)
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+    price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
     btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
     cad_exchange    = models.DecimalField(decimal_places=2, max_digits=10, default=0)
+    is_problem      = models.BooleanField(default=False)
     date_created    = models.DateTimeField(auto_now_add=True)
 
-    # objects = PaymentManager()
+    objects = PaymentManager()
 
-    def stop_notify(self):
+
+    def check_cad_acceptable(self):
+        """
+        Returns bool.
+        Compares the CAD amount received with the CAD amount requested.
+        If CAD received is too low self.is_problem becomes True.
+        """
+        pay_request = PaymentRequest.objects.filter(address_id=self.address_id).last()
         
-        server = Server(settings.JSON_RPC)
-        server.notify(address=self.address_id.address)
+        if self.cad_exchange >= pay_request.cad_due:
+            return True
+
+        if self.cad_exchange >= pay_request.cad_min_allowance():
+            return True
+        else:
+            self.is_problem = True
+            self.save()
+
+        return False
+
+
+
 
 
 

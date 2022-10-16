@@ -16,6 +16,7 @@ from price.models import CryptoCoin, CryptoPrice
 import decimal
 import json
 
+from django.urls import reverse
 from django.conf import settings
 from jsonrpclib import Server
 
@@ -29,7 +30,6 @@ class PayRequestView(APIView):
         
         data = request.data
         wallet = get_object_or_404(CryptoWallet, slug='greatkart-wallet')
-
         wallet.load_wallet()
         cad_price = data['cad']
         #TODO: add datetime in request.data! so we can compare it to datetime of first address notification
@@ -41,7 +41,7 @@ class PayRequestView(APIView):
         btc_price = price.cad_to_btc(decimal.Decimal(cad_price))
         
         server = Server(settings.JSON_RPC)
-        electrum_request = server.add_request(amount=float(btc_price), wallet=wallet.path(), force=True)
+        electrum_request = server.add_request(amount=float(btc_price), expiration=settings.PAY_REQUEST_EXPIRY, wallet=wallet.path(), force=True)
 
         address = CryptoAddress.objects.get_or_create(
             wallet_id=wallet,
@@ -49,6 +49,7 @@ class PayRequestView(APIView):
         )[0]
         pr = PaymentRequest.objects.create(
             address_id = address,
+            price_id = price,
             btc_due = btc_price,
             cad_due = cad_price,
         )
@@ -58,10 +59,10 @@ class PayRequestView(APIView):
         # server.notify(address=address.address, URL='')
         # set up notification
         print('-'*50)
-        print('notify: ', address.notify('http://localhost:8000/wallet_api/notify/'))
+        print('notify: ', address.notify(reverse('notify')))
         print('-'*50)
 
-        # data = payment_request.payment_details()
+        # data = payment_request.details()
         serializer = PayRequestSerializer(pr)
 
         # address.delete()
@@ -76,42 +77,57 @@ class NotifyView(APIView):
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
+
         data = request.data
-        print('NotifyView data: ', data)
+        # print('NotifyView data: ', data)
 
         address = get_object_or_404(CryptoAddress, address=data['address'])
+
         wallet = get_object_or_404(CryptoWallet, id=address.wallet_id.id)
         wallet.load_wallet()
         balance = address.get_balance()
 
-        AddressNotification.objects.create(
+        notification = AddressNotification.objects.create(
             address_id = address,
-            btc_unconfirmed = balance['unconfirmed'],
-            btc_confirmed = balance['confirmed']
-        )  
+            btc_unconfirmed = decimal.Decimal(balance['unconfirmed']),
+            btc_confirmed = decimal.Decimal(balance['confirmed'])
+        )
+        if notification.btc_confirmed > 0:
+            payment = Payment.objects.payment_received(address=address, btc=notification.btc_confirmed)
+            if payment.check_cad_acceptable() == True:
+                notification.stop_notify()
+                # TODO: send payment confirmation to vendor. this requires some thought.
+
         return Response()
 
 
-@api_view(['POST'])
-@permission_classes((permissions.AllowAny,))
-def notification(request):
 
-    if request.method != 'POST':
-        return HttpResponseBadRequest
+
+
+
+
+
+
+# @api_view(['POST'])
+# @permission_classes((permissions.AllowAny,))
+# def notification(request):
+
+#     if request.method != 'POST':
+#         return HttpResponseBadRequest
     
-    data = request.data
-    print(data)
+#     data = request.data
+#     print(data)
 
-    address = get_object_or_404(CryptoAddress, address=data['address'])
-    wallet = get_object_or_404(CryptoWallet, id=address.wallet_id.id)
-    wallet.load_wallet()
-    balance = address.get_balance()
+#     address = get_object_or_404(CryptoAddress, address=data['address'])
+#     wallet = get_object_or_404(CryptoWallet, id=address.wallet_id.id)
+#     wallet.load_wallet()
+#     balance = address.get_balance()
 
-    AddressNotification.objects.create(
-        address_id = address,
-        btc_unconfirmed = balance['unconfirmed'],
-        btc_confirmed = balance['confirmed']
-    )
+#     AddressNotification.objects.create(
+#         address_id = address,
+#         btc_unconfirmed = balance['unconfirmed'],
+#         btc_confirmed = balance['confirmed']
+#     )
 
 
     # print(address.confirm_full_payment(balance))
@@ -121,7 +137,7 @@ def notification(request):
     #     "address"   : "bc1qkfcwrwva3s82j3m4uyv7zvvsgqk9kc36ggykw2", 
     #     "status"    : "3742b7c6e559d347734a4c4cdd40fded22458fd6b43f9a2f78d61a990c5ca712"},
 
-    return HttpResponse('hihih')
+    # return HttpResponse('hihih')
 
 
 
@@ -160,7 +176,7 @@ def notification(request):
 #     address.notify('http://localhost:8000/wallet_api/notification/')
 #     wallet.close_wallet()
 
-#     data = payment_request.payment_details()
+#     data = payment_request.details()
 #     serializer = PayRequestSerializer(data)
 
 #     # address.delete()

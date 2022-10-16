@@ -30,12 +30,15 @@ env = environ.Env()
 environ.Env.read_env()
 
 # MY CONSTANTS:
-ELECTRUM = '/home/baga/.local/bin/./electrum'
-WALLET_DIR = '/home/baga/.electrum/wallets'
-JSON_RPC = f"http://{env('RPC_USER')}:{env('RPC_PASS')}@127.0.0.1:{env('RPC_PORT')}"
-COINS_LONG = env('COINS_LONG')
-COINS_SHORT = env('COINS_SHORT')
-COINMARKETCAP_API_KEY = env('COINMARKETCAP_API_KEY')
+ELECTRUM                = env('ELECTRUM_PATH')
+WALLET_DIR              = env('WALLET_DIR')
+PAY_REQUEST_EXPIRY      = 604800 # seconds. 7 days
+JSON_RPC                = f"http://{env('RPC_USER')}:{env('RPC_PASS')}@127.0.0.1:{env('RPC_PORT')}"
+WALLET_PASS             = env('WALLET_PASS')
+COINS_LONG              = env('COINS_LONG')
+COINS_SHORT             = env('COINS_SHORT')
+COINMARKETCAP_API_KEY   = env('COINMARKETCAP_API_KEY')
+CAD_ALLOWANCE           = 0.95
 
 # django-cryptography module settings:
 CRYPTOGRAPHY_BACKEND = default_backend()
