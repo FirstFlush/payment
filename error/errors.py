@@ -1,5 +1,9 @@
 
 
+class SendPaymentDetailsError(Exception):
+    """Raised when sending payment details to vendor URL returns 404 error"""
+    pass
+
 class CurrencySanityError(Exception):
     '''Raised when the $CAD received is different from $CAD expected'''
     pass

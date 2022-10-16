@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 
 from .models import AddressNotification, CryptoAddress, CryptoWallet, PaymentRequest, Payment
-from .serializers import PayRequestSerializer
+from .serializers import PayRequestSerializer, PaymentSerializer
 from price.models import CryptoCoin, CryptoPrice
 
 import decimal
@@ -20,6 +20,18 @@ from django.urls import reverse
 from django.conf import settings
 from jsonrpclib import Server
 
+
+class TestView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, *args, **kwargs):
+
+        payment = Payment.objects.last()
+        serializer = PaymentSerializer(payment)
+        payment.send_payment_details(serializer.data)
+        
+        return Response(serializer.data)
 
 
 class PayRequestView(APIView):
@@ -58,9 +70,11 @@ class PayRequestView(APIView):
         # server = Server(settings.JSON_RPC)
         # server.notify(address=address.address, URL='')
         # set up notification
-        print('-'*50)
-        print('notify: ', address.notify(reverse('notify')))
-        print('-'*50)
+        print()
+        print('notifying: ', reverse('notify'))
+        address.notify('http://localhost:8000/wallet_api/notify/')
+        print()
+
 
         # data = payment_request.details()
         serializer = PayRequestSerializer(pr)
@@ -79,7 +93,7 @@ class NotifyView(APIView):
     def post(self, request, *args, **kwargs):
 
         data = request.data
-        # print('NotifyView data: ', data)
+        print('NotifyView data: ', data)
 
         address = get_object_or_404(CryptoAddress, address=data['address'])
 
@@ -95,8 +109,9 @@ class NotifyView(APIView):
         if notification.btc_confirmed > 0:
             payment = Payment.objects.payment_received(address=address, btc=notification.btc_confirmed)
             if payment.check_cad_acceptable() == True:
-                notification.stop_notify()
-                # TODO: send payment confirmation to vendor. this requires some thought.
+                address.notify_stop()
+                serializer = PaymentSerializer(payment)
+                payment.send_payment_details(serializer.data)
 
         return Response()
 

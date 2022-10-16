@@ -7,7 +7,8 @@ urlpatterns = [
     # path('notification/', views.notification, name='notification'),
     path('notify/', views.NotifyView.as_view(), name='notify'),
     # path('vendor_test/', views.vendor_request_test, name='vendor'),
-    path('pay_request/', views.PayRequestView.as_view()),
+    path('pay_request/', views.PayRequestView.as_view(), name='pay_request'),
+    path('test/', views.TestView.as_view(), name='test'),
     # path('thing/', include('knox.urls')),
     # path('api-token-auth/', auth_views.obtain_auth_token),
     

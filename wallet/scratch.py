@@ -7,16 +7,18 @@
 
 # cmd = Commands()
 import decimal
+from django.urls import reverse
 
 
-cad_due = 122.51
 
-PERCENT_ALLOW = 0.95
+# cad_due = 122.51
 
-cad_received = 121.41
+# PERCENT_ALLOW = 0.95
 
-allow_threshold = 40 * PERCENT_ALLOW
+# cad_received = 121.41
 
-print(allow_threshold)
+# allow_threshold = 40 * PERCENT_ALLOW
 
-min_allowed_payment = 0.52 * decimal.Decimal(12)
+# print(allow_threshold)
+
+# min_allowed_payment = 0.52 * decimal.Decimal(12)

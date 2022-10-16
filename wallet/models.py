@@ -3,7 +3,7 @@ from django.db import models
 from django.conf import settings
 from django_cryptography.fields import encrypt
 from django.utils.text import slugify
-from error.errors import WalletCloseError, WalletLoadError
+from error.errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError
 
 from price.models import CryptoCoin, CryptoPrice
 from account.models import Account
@@ -16,6 +16,7 @@ import qrcode.image.svg
 from math import isclose
 from jsonrpclib import Server
 import hashlib
+import requests
 
 
 def decimalize(dictionary):
@@ -86,6 +87,7 @@ class CryptoWallet(models.Model):
     slug        = models.SlugField(max_length=255, unique=True)
     is_vendor   = models.BooleanField(default=False)
     is_active   = models.BooleanField(default=True)
+    vendor_url  = models.URLField(max_length=255)
 
     objects = CryptoWalletManager()
 
@@ -147,20 +149,17 @@ class CryptoAddress(models.Model):
     # objects = CryptoAddressManager()
 
     def __str__(self):
-        if self.is_used == True:
-            return f"{self.address[:8]}....{self.address[-4:]} (used)"
-        else:
-            return f"{self.address[:8]}....{self.address[-4:]}"
+        return f"{self.address[:8]}....{self.address[-4:]}"
 
 
     def get_balance(self):
-        '''
+        """
         Checks the address' balance. Returns a dict of decimals:
         {
             'confirmed' : 0.0034423,
             'unconfirmed' : 0,
         }
-        '''
+        """
         server = Server(settings.JSON_RPC)
         balance = server.getaddressbalance(self.address)
 
@@ -168,41 +167,29 @@ class CryptoAddress(models.Model):
 
 
     def notify(self, url=str):
-        '''Electrum notify command. Returns boolean'''
-        # TODO pass in address.. url = reverse(this function does some urls.py shit)
-
+        """Electrum notify command. Returns boolean"""
         server = Server(settings.JSON_RPC)
         notification =server.notify(self.address, url)
         return notification
 
 
     def notify_stop(self):
-        '''Stops the notification on an address.'''
+        """
+        Returns nothing.
+        Stops the notification monitoring of an address.
+        """        
         server = Server(settings.JSON_RPC)
-        notification =server.notify(self.address)
-        return notification
-
-
-    # def confirm_full_payment(self, balance):
-    #     '''
-    #     Checks if the balance in the address is the same (or almost the same) as the balance owed.
-    #     **Does not check if BTC prices are the same as when the payment request was first generated!
-    #     Returns boolean 'is_paid'
-    #     '''
-    #     bal_confirmed    = balance['confirmed']
-    #     abs_tol = 0.000009
-
-    #     is_paid = isclose(bal_confirmed, self.btc_due, abs_tol=abs_tol)
-    #     return is_paid
+        server.notify(self.address, '') # '' is empty URL string to stop notifications
+        return
 
 
     def currency_sanity_check(self, balance):
-        '''
+        """
         Checks the current exchange rate to make sure 
         there hasn't been a huge drop between the time 
         the payment request was initiated to the time we 
         actually received the crypto.
-        '''
+        """
         btc_price   = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
         bal_conf    = balance['confirmed']
         bal_cad     = bal_conf * btc_price.price
@@ -336,23 +323,12 @@ class AddressNotification(models.Model):
         return False
 
 
-    def stop_notify(self):
-        """
-        Returns nothing.
-        Stops the notification monitoring of an address.
-        """        
-        server = Server(settings.JSON_RPC)
-        server.notify(address=self.address_id.address)
-
-
-
 
 class PaymentManager(models.Manager):
 
-
     def payment_received(self, address, btc):
         """Creates a new Payment instance"""
-        price = CryptoPrice.objects.filter(coin_id__coin_name='bitcoin').last()
+        price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
         cad = price.btc_to_cad(btc)
 
         new_payment = Payment.objects.create(
@@ -366,7 +342,6 @@ class PaymentManager(models.Manager):
 
 class Payment(models.Model):
 
-    # request_id = models.ForeignKey(to=PaymentRequest, on_delete=models.CASCADE)
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
     price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
     btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
@@ -375,6 +350,25 @@ class Payment(models.Model):
     date_created    = models.DateTimeField(auto_now_add=True)
 
     objects = PaymentManager()
+
+
+    def send_payment_details(self, details):
+
+        headers = {
+        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0',
+        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language':'en-US,en;q=0.5',
+        'Accept-Encoding':'gzip, deflate',
+        'Dnt':'1',
+        'Connection':'keep-alive',
+        'Upgrade-Insecure-Requests':'1',
+        }
+        # url = self.address_id.wallet_id.vendor_url
+        url = 'http://localhost:8080' #TESTING PURPOSES ONLY!
+        r = requests.post(url=url, data=details, headers=headers)
+        if r.status_code == 404:
+            raise SendPaymentDetailsError
+        return
 
 
     def check_cad_acceptable(self):
