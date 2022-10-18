@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 
 from .models import AddressNotification, CryptoAddress, CryptoWallet, PaymentRequest, Payment
 from .serializers import PayRequestSerializer, PaymentSerializer
-from price.models import CryptoCoin, CryptoPrice
+from payment.price.models import CryptoCoin, CryptoPrice
 
 import decimal
 import json
@@ -66,21 +66,12 @@ class PayRequestView(APIView):
             cad_due = cad_price,
         )
 
-        # stop notification:
-        # server = Server(settings.JSON_RPC)
-        # server.notify(address=address.address, URL='')
-        # set up notification
         print()
         print('notifying: ', reverse('notify'))
         address.notify('http://localhost:8000/wallet_api/notify/')
         print()
 
-
-        # data = payment_request.details()
         serializer = PayRequestSerializer(pr)
-
-        # address.delete()
-
         return Response(serializer.data)
 
 

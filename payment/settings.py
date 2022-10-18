@@ -47,6 +47,9 @@ CRYPTOGRAPHY_KEY = None     #None means Django will automatically generate one f
 CRYPTOGRAPHY_SALT = 'django-cryptography'
 # SIGNING_BACKEND = 'django_cryptography.core.signing.TimestampSigner'
 
+# CELERY CONSTANtS
+CELERY_BROKER_URL = 'amqp://localhost'
+
 
 REST_FRAMEWORK = {
     # Use Django's standard `django.contrib.auth` permissions,
@@ -96,10 +99,10 @@ INSTALLED_APPS = [
     'knox',
     'django_extensions',
     'psycopg2',
-    'wallet',
-    'price',
-    'error',
-    'account',
+    'payment.wallet',
+    'payment.price',
+    'payment.error',
+    'payment.account',
 ]
 
 MIDDLEWARE = [

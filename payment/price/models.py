@@ -1,7 +1,7 @@
 from django.db import models
 from django.conf import settings 
 
-from error.errors import PriceFetchApiFailure
+from payment.error.errors import PriceFetchApiFailure
 
 from requests import Session
 from requests.exceptions import ConnectionError, Timeout, TooManyRedirects

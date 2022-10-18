@@ -22,8 +22,8 @@ from django.urls import include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('wallet_api/', include('wallet.urls')),
-    path('price_api/', include('price.urls')),
+    path('wallet_api/', include('payment.wallet.urls')),
+    path('price_api/', include('payment.price.urls')),
     path('auth/', include('knox.urls')),
     # url(r'auth/', include('knox.urls')),
 

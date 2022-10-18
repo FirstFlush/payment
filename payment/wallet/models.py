@@ -3,10 +3,10 @@ from django.db import models
 from django.conf import settings
 from django_cryptography.fields import encrypt
 from django.utils.text import slugify
-from error.errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError
+from payment.error.errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError
 
-from price.models import CryptoCoin, CryptoPrice
-from account.models import Account
+from payment.price.models import CryptoCoin, CryptoPrice
+from payment.account.models import Account
 
 import json
 import decimal
@@ -225,7 +225,7 @@ class CryptoAddress(models.Model):
 class RequestManager(models.Manager):
 
     def add_request(self, wallet, cad_amount, btc_amount):
-        '''
+        """
         Takes wallet object, btc owed, cad owed. Returns a new PaymentRequest instance via JSON RPC call.
         {
             "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
@@ -239,7 +239,7 @@ class RequestManager(models.Manager):
             "status_str": "Expires in about 1 hour",
             "timestamp": 1664956697
         }
-        '''
+        """
         server = Server(settings.JSON_RPC)
         request = server.add_request(amount=float(btc_amount), wallet=wallet.path(), force=True)
         return request
