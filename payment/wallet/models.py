@@ -3,7 +3,7 @@ from django.db import models
 from django.conf import settings
 from django_cryptography.fields import encrypt
 from django.utils.text import slugify
-from payment.error.errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError
+from .errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError
 
 from payment.price.models import CryptoCoin, CryptoPrice
 from payment.account.models import Account
@@ -80,6 +80,7 @@ class CryptoWalletManager(models.Manager):
 
 class CryptoWallet(models.Model):
 
+    coin_id     = models.ForeignKey(to=CryptoCoin, on_delete=models.CASCADE)
     account_id  = models.ForeignKey(to=Account, on_delete=models.CASCADE)
     wallet_name = models.CharField(max_length=255, unique=True)
     # vendor_key  = models.CharField(max_length=255, unique=True)
@@ -224,22 +225,25 @@ class CryptoAddress(models.Model):
 
 class RequestManager(models.Manager):
 
-    def add_request(self, wallet, cad_amount, btc_amount):
-        """
-        Takes wallet object, btc owed, cad owed. Returns a new PaymentRequest instance via JSON RPC call.
-        {
-            "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
-            "address": "bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u",
-            "amount_BTC": "0.00027921",
-            "amount_sat": 27921,
-            "expiration": 3600,
-            "is_lightning": false,
-            "message": "",
-            "status": 0,
-            "status_str": "Expires in about 1 hour",
-            "timestamp": 1664956697
-        }
-        """
+
+    """
+    add_request electrum response:
+    {
+        "URI": "bitcoin:bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u?amount=0.00027921&time=1664956697&exp=3600",
+        "address": "bc1q0jvf6pdsls8gcjm02yed3n6k6vzfywuvsfs75u",
+        "amount_BTC": "0.00027921",
+        "amount_sat": 27921,
+        "expiration": 3600,
+        "is_lightning": false,
+        "message": "",
+        "status": 0,
+        "status_str": "Expires in about 1 hour",
+        "timestamp": 1664956697
+    }
+    """
+
+
+    def create_request(self, wallet, cad_amount, btc_amount):
         server = Server(settings.JSON_RPC)
         request = server.add_request(amount=float(btc_amount), wallet=wallet.path(), force=True)
         return request
@@ -266,7 +270,6 @@ class RequestManager(models.Manager):
 class PaymentRequest(models.Model):
 
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
-    price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
     btc_due         = models.DecimalField(decimal_places=7, max_digits=10)
     cad_due         = models.DecimalField(decimal_places=2, max_digits=10)
     is_paid         = models.BooleanField(default=False)
@@ -333,7 +336,6 @@ class PaymentManager(models.Manager):
 
         new_payment = Payment.objects.create(
             address_id = address,
-            price_id = price,
             btc_confirmed = btc,
             cad_exchange = cad
         )
@@ -343,7 +345,7 @@ class PaymentManager(models.Manager):
 class Payment(models.Model):
 
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
-    price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
+    # price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
     btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
     cad_exchange    = models.DecimalField(decimal_places=2, max_digits=10, default=0)
     is_problem      = models.BooleanField(default=False)
@@ -392,6 +394,18 @@ class Payment(models.Model):
 
 
 
+
+
+class WalletApiFailure(models.Model):
+    # TODO: is this necessary? explore basic logging practices before building this.
+    
+    error           = models.CharField(max_length=255)
+    date_created    = models.DateTimeField(auto_now_add=True)
+    notes           = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'Wallet API Failure'
+        verbose_name_plural = 'Wallet API Failures'
 
 
 

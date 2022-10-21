@@ -39,6 +39,8 @@ COINS_LONG              = env('COINS_LONG')
 COINS_SHORT             = env('COINS_SHORT')
 COINMARKETCAP_API_KEY   = env('COINMARKETCAP_API_KEY')
 CAD_ALLOWANCE           = 0.95
+TIME_CHECK              = 7 # minutes
+DELETE_PRICE_DAYS       = 5 # delete CryptoPrice objects older than this many days.
 
 # django-cryptography module settings:
 CRYPTOGRAPHY_BACKEND = default_backend()
@@ -81,7 +83,11 @@ SECRET_KEY = env('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost']
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '192.168.1.65',
+    ]
 
 #APPEND_SLASH = False
 
@@ -99,6 +105,7 @@ INSTALLED_APPS = [
     'knox',
     'django_extensions',
     'psycopg2',
+    'django_celery_beat',
     'payment.wallet',
     'payment.price',
     'payment.error',

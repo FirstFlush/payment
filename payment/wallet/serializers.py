@@ -4,10 +4,18 @@ from .models import PaymentRequest, Payment
 
 class PayRequestSerializer(serializers.ModelSerializer):
 
+    address = serializers.CharField(source='address_id.address')
+    coin = serializers.CharField(source='address_id.wallet_id.coin_id.coin_name_short')
+
     class Meta:
         model = PaymentRequest
-        fields = '__all__'
-        depth = 1
+        fields = [
+            'address',
+            'btc_due',
+            'coin',
+        ]
+
+        # depth = 1
         # exclude = ['btc_due']
 
 

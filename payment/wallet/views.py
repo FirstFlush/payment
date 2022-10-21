@@ -8,8 +8,8 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-
-from .models import AddressNotification, CryptoAddress, CryptoWallet, PaymentRequest, Payment
+from .errors import SendPaymentDetailsError
+from .models import AddressNotification, CryptoAddress, CryptoWallet, PaymentRequest, Payment, WalletApiFailure
 from .serializers import PayRequestSerializer, PaymentSerializer
 from payment.price.models import CryptoCoin, CryptoPrice
 
@@ -29,7 +29,14 @@ class TestView(APIView):
 
         payment = Payment.objects.last()
         serializer = PaymentSerializer(payment)
-        payment.send_payment_details(serializer.data)
+        try:
+            payment.send_payment_details(serializer.data)
+        except SendPaymentDetailsError as e:
+            error = e.__class__.__name__
+            WalletApiFailure.objects.create(
+                error=error,
+                notes = f"payment ID: {payment.id}"
+            )
         
         return Response(serializer.data)
 
@@ -37,9 +44,12 @@ class TestView(APIView):
 class PayRequestView(APIView):
     authentication_classes = [TokenAuthentication,]
     permission_classes = [IsAuthenticated]
+    # authentication_classes = []
+    # permission_classes = []
 
     def post(self, request, *args, **kwargs):
-        
+
+        print(request.auth)
         data = request.data
         wallet = get_object_or_404(CryptoWallet, slug='greatkart-wallet')
         wallet.load_wallet()
@@ -59,9 +69,10 @@ class PayRequestView(APIView):
             wallet_id=wallet,
             address=electrum_request['address']
         )[0]
+
         pr = PaymentRequest.objects.create(
             address_id = address,
-            price_id = price,
+            # price_id = price,
             btc_due = btc_price,
             cad_due = cad_price,
         )

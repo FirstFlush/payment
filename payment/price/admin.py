@@ -25,7 +25,6 @@ class CryptoPriceAdmin(admin.ModelAdmin):
 class PriceApiFailureAdmin(admin.ModelAdmin):
 
     list_display = [
-        'failed_api',
         'error',
         'date_created'
     ]

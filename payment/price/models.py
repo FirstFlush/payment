@@ -1,13 +1,15 @@
+from logging import NOTSET
 from django.db import models
 from django.conf import settings 
 
-from payment.error.errors import PriceFetchApiFailure
+from .errors import CoinGeckoError, CoinMarketCapError
 
 from requests import Session
 from requests.exceptions import ConnectionError, Timeout, TooManyRedirects
 from datetime import datetime, timedelta
 import json
 import decimal
+
 # import logging
 
 
@@ -26,33 +28,22 @@ class CryptoCoin(models.Model):
 
 
 
-class CryptoPriceManager(models.Manager):        
-
-    def get_latest_price(self, coin):
-        '''Grabs the latest price'''
-            
-        t = datetime.now()
-        time_threshold = t - timedelta(minutes=15)
-
-        latest_price = CryptoPrice.objects.filter(coin_fk=coin, date_created__gt=time_threshold).last()
-
-        if latest_price == None:
-            # log and also maybe put in a 3rd api call here?
-            print('[NO PRICE] Gotta fetch a new price!! Making API Call')
-            CryptoPrice.objects.coingecko()
-            latest_price = CryptoPrice.objects.filter(coin_fk=coin, date_created__gt=time_threshold).last()
-
-        else:
-            print('[PRICE FOUND] No need to fetch a new price')
-
-        return latest_price
+class CryptoPriceManager(models.Manager):
 
 
-    def coingecko(self):
-        '''
-        API Call to CoinGecko to fetch crypto prices and save them into the database
-        '''
+    def delete_old(self):
+        """Deletes all the prices that are older than (x) days,
+        as defined in settings.py
+        """
+        time_threshold = datetime.utcnow() - timedelta(days=settings.DELETE_PRICE_DAYS)
+        old_prices = CryptoPrice.objects.filter(date_created__date__lt=time_threshold)
+        old_prices.delete()
 
+
+    def _coingecko(self) -> tuple:
+        """API Call to CoinGecko to fetch crypto 
+        prices and save them into the database.
+        """
         url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin%2Clitecoin&vs_currencies=cad'
 
         parameters = {
@@ -71,30 +62,27 @@ class CryptoPriceManager(models.Manager):
         try:
             response = session.get(url, params=parameters)
             data = json.loads(response.text)
-
+        except (ConnectionError, Timeout, TooManyRedirects):
+            raise CoinGeckoError
+        else:
             for coin in settings.COINS_LONG.split(','):
                 coin_prices[coin.lower()] = decimal.Decimal(round(data[coin]['cad'], 2))
 
-
-        except (ConnectionError, Timeout, TooManyRedirects) as e:
-            raise e
-            # TODO try a 3rd API? log this shit too 
-
-        print(coin_prices)
-
+        prices = []
         for coin, price in coin_prices.items():
             crypto_coin = CryptoCoin.objects.get(coin_name=coin)
-            CryptoPrice.objects.create(coin_fk=crypto_coin, price=price)
+            price_obj = CryptoPrice.objects.create(coin_fk=crypto_coin, price=price)
+            prices.append(price_obj)
 
-        return
+        return tuple(prices)
 
 
-    def coinmarketcap(request):
-        '''
-        Backup API with CoinMarketCap in case the CoinGecko API fails
-        '''
+    def _coinmarketcap(request) -> tuple:
+        """Backup API with CoinMarketCap in case 
+        the CoinGecko API fails
+        """
 
-        url = ' https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest'
+        url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest'
 
         parameters = {
             'convert':'CAD',
@@ -113,23 +101,33 @@ class CryptoPriceManager(models.Manager):
         try:
             response = session.get(url, params=parameters)
             data = json.loads(response.text)
-
+        except (ConnectionError, Timeout, TooManyRedirects):
+            raise CoinMarketCapError
+        else:
             coin_prices['bitcoin'] = decimal.Decimal(round(data['data']['BTC']['quote']['CAD']['price'], 2))
             coin_prices['litecoin'] = decimal.Decimal(round(data['data']['LTC']['quote']['CAD']['price'], 2))
 
-        except (ConnectionError, Timeout, TooManyRedirects) as e:
-            print(e)
-            
-
-        print('-'*30)
-        print(coin_prices)
-        print('-'*30)
-
+        prices = []
         for coin, price in coin_prices.items():
             crypto_coin = CryptoCoin.objects.get(coin_name=coin)
-            CryptoPrice.objects.create(coin_fk=crypto_coin, price=price)
+            price_obj = CryptoPrice.objects.create(coin_fk=crypto_coin, price=price)
+            prices.append(price_obj)
 
-        return
+        return tuple(prices)
+
+
+    def coingecko(self):
+        prices = self._coingecko()
+        if type(prices) != tuple:
+            raise CoinGeckoError
+        return prices
+
+
+    def coinmarketcap(self):
+        prices = self._coinmarketcap()
+        if type(prices) != tuple:
+            raise CoinMarketCapError
+        return prices
 
 
 
@@ -148,21 +146,19 @@ class CryptoPrice(models.Model):
         btc = cad / self.price
         return btc
 
+
     def btc_to_cad(self, btc):
-        #TODO test
         cad = self.price * btc
         return cad
 
 
     def check_time(self):
-
-        # TODO needs work lolol
-        # t = datetime.utcnow()
-        time_threshold = datetime.now() - timedelta(minutes=15)
-        if self.date_created > time_threshold:
-            print('good?')
+        """Returns True if the time was fetched within (x) minutes, as defined in settings.py"""
+        time_threshold = datetime.utcnow() - timedelta(minutes=settings.TIME_CHECK)
+        if self.date_created.replace(tzinfo=None) > time_threshold:
+            return True
         else:
-            print('bad i think')
+            return False
 
 
     def __str__(self):
@@ -171,9 +167,9 @@ class CryptoPrice(models.Model):
 
 
     def round_digits(self):
-        '''
-        Checks which coin we are dealing with, then decides how many digits to round
-        '''
+        """
+        Returns integer for # of digits the price will be rounded to.
+        """
         coins = {
             'bitcoin'   : 6,
             'litecoin'  : 3,
@@ -189,36 +185,11 @@ class CryptoPrice(models.Model):
 
 
 
-
-
-
-class PriceApiFailureManager(models.Manager):
-
-    def fail(e, failed_api):
-
-        error_str = str(type(e))[:50]
-
-        raise PriceFetchApiFailure
-
-        PriceApiFailure.objects.create(
-            failed_api=failed_api,
-            error=error_str
-        )
-
-
-
 class PriceApiFailure(models.Model):
 
-    FAILURE_CHOICES = (
-        ('coingecko', 'coingecko.com'),
-        ('coinmarketcap', 'coinmarketcap.com'),
-    )
-
-    failed_api      = models.CharField(max_length=50, choices=FAILURE_CHOICES)
-    error           = models.CharField(max_length=60)
+    error           = models.CharField(max_length=255)
     date_created    = models.DateTimeField(auto_now_add=True)
-
-    objects = PriceApiFailureManager()
+    notes           = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = 'Price API Failure'

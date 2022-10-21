@@ -1,8 +1,4 @@
 
-
-
-
-
 class SendPaymentDetailsError(Exception):
     """Raised when sending payment details to vendor URL returns 404 error"""
     pass
