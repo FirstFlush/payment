@@ -9,16 +9,19 @@
 import decimal
 from django.urls import reverse
 
+import hmac
+import hashlib
+
+from rest_framework_hmac.hmac_key.models import HMACKey
 
 
-# cad_due = 122.51
+def _hmac(data=dict):
+    # key = settings.HMAC_KEY
+    key = 'bleh'
+    key = bytes(key, 'utf-8')
+    message = bytes(data, 'utf-8')
+    dig = hmac.new(key, message, hashlib.sha256)
+    return dig.hexdigest()
 
-# PERCENT_ALLOW = 0.95
 
-# cad_received = 121.41
-
-# allow_threshold = 40 * PERCENT_ALLOW
-
-# print(allow_threshold)
-
-# min_allowed_payment = 0.52 * decimal.Decimal(12)
+print(_hmac('secret-key', 'wow important message'))

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 
 from pathlib import Path
 import os
+import decimal
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.hashes import SHA256
 import environ
@@ -38,7 +39,9 @@ WALLET_PASS             = env('WALLET_PASS')
 COINS_LONG              = env('COINS_LONG')
 COINS_SHORT             = env('COINS_SHORT')
 COINMARKETCAP_API_KEY   = env('COINMARKETCAP_API_KEY')
-CAD_ALLOWANCE           = 0.95
+CAD_MIN_ALLOWANCE       = decimal.Decimal(0.95)
+BTC_MIN_ALLOWANCE       = decimal.Decimal(0.98)
+OVERPAYMENT_THRESH      = decimal.Decimal(1.2)
 TIME_CHECK              = 7 # minutes
 DELETE_PRICE_DAYS       = 5 # delete CryptoPrice objects older than this many days.
 
@@ -104,6 +107,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'knox',
     'django_extensions',
+    'rest_framework_hmac.hmac_key',
     'psycopg2',
     'django_celery_beat',
     'payment.wallet',

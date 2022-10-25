@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CryptoAddress, CryptoWallet, PaymentRequest, AddressNotification, Payment
+from .models import CryptoAddress, CryptoWallet, PaymentRequest, Balance, Payment
 
 
 
@@ -32,7 +32,7 @@ class CryptoAddressAdmin(admin.ModelAdmin):
     ]
 
 
-class NotificationAdmin(admin.ModelAdmin):
+class BalanceAdmin(admin.ModelAdmin):
     list_display = [
         'address_id',
         'btc_unconfirmed',
@@ -57,6 +57,7 @@ class PaymentRequestAdmin(admin.ModelAdmin):
 class PaymentAdmin(admin.ModelAdmin):
     list_display = [
         'address_id',
+        'status',
         'btc_confirmed',
         'cad_exchange',
         'date_created',
@@ -67,5 +68,5 @@ class PaymentAdmin(admin.ModelAdmin):
 admin.site.register(CryptoWallet, CryptoWalletAdmin)
 admin.site.register(CryptoAddress, CryptoAddressAdmin)
 admin.site.register(PaymentRequest, PaymentRequestAdmin)
-admin.site.register(AddressNotification, NotificationAdmin)
+admin.site.register(Balance, BalanceAdmin)
 admin.site.register(Payment, PaymentAdmin)

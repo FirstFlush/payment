@@ -28,6 +28,7 @@ def fetch_price():
 def delete_old_prices():
     """Ran daily by celery to delete old prices
     """
+    print('hihihi')
     CryptoPrice.objects.delete_old()
     return
 

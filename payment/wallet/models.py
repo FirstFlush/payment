@@ -3,7 +3,7 @@ from django.db import models
 from django.conf import settings
 from django_cryptography.fields import encrypt
 from django.utils.text import slugify
-from .errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError
+from .errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError, OrphanPaymentError
 
 from payment.price.models import CryptoCoin, CryptoPrice
 from payment.account.models import Account
@@ -286,7 +286,7 @@ class PaymentRequest(models.Model):
         """
         Returns decimal.
         """
-        min_allowed_payment = self.cad_due * decimal.Decimal(settings.CAD_ALLOWANCE)
+        min_allowed_payment = self.cad_due * decimal.Decimal(settings.CAD_MIN_ALLOWANCE)
         return min_allowed_payment
 
 
@@ -304,17 +304,36 @@ class PaymentRequest(models.Model):
         return pay_details
 
 
-class AddressNotification(models.Model):
+class Balance(models.Model):
 
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
     btc_unconfirmed = models.DecimalField(decimal_places=7, max_digits=10, default=0)
     btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    status          = models.CharField(max_length=255)
     date_created    = models.DateTimeField(auto_now_add=True)
 
 
-    def check_full_payment(self):
-        """
-        Returns bool. Checks if the btc_confirmed is >= to btc_due.
+    def is_confirmed_balance_change(self) -> bool:
+        """Checks if there are any other btc_confirmed balances 
+        for this address. And if so, has the value changed from 
+        the previous one."""
+        prev_confirmed_balance = Balance.objects.filter(address_id=self.address_id, id__lt=self.id, btc_confirmed__gt=0).exclude(id=self.id).last()
+        print('prev bal: ', prev_confirmed_balance)
+
+        if hasattr(prev_confirmed_balance,'btc_confirmed'):
+            if self.btc_confirmed != prev_confirmed_balance.btc_confirmed:
+                return True
+            else:
+                print('has attr, no balance change')
+                return False
+        else: # prev_balance returns NoneType. No payments exist on address
+            if self.btc_confirmed > 0:
+                return True
+            return False
+
+
+    def check_full_payment(self) -> bool:
+        """Checks if the btc_confirmed is >= to btc_due.
         *Confirms we received correct amount of BTC. Does NOT confirm 
         if currency conversion is wthin an acceptable range!
         """
@@ -326,6 +345,17 @@ class AddressNotification(models.Model):
         return False
 
 
+    def is_status_duplicate(self):
+        """Returns True if a recorded Balance has the same status value. 
+        This method exists because for some reason Electrum sends 
+        balance-change notification twice. Dunny why.
+        """
+        prev_balance = Balance.objects.filter(address_id=self.address_id, status=self.status).exclude(id=self.id).last()
+        if hasattr(prev_balance, 'status'):
+            return True
+        return False
+
+
 
 class PaymentManager(models.Manager):
 
@@ -333,29 +363,71 @@ class PaymentManager(models.Manager):
         """Creates a new Payment instance"""
         price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
         cad = price.btc_to_cad(btc)
-
-        new_payment = Payment.objects.create(
+        new_payment = Payment(
             address_id = address,
             btc_confirmed = btc,
             cad_exchange = cad
         )
+        try:
+            pay_request = Payment.objects._find_pay_request(address)
+        except OrphanPaymentError:
+            new_payment.status = 'orphan_payment'
+        else:
+            new_payment.pay_request_id = pay_request
+            new_payment._create_status(pay_request)
+        new_payment.save()
         return new_payment
+
+
+    def _find_pay_request(self, address):
+        """Finds PayRequest so we can link Payment to it. 
+        returns OrphanPaymentError if no PayRequest object 
+        is found."""
+        pay_request = PaymentRequest.objects.filter(address_id=address).last()
+        if hasattr(pay_request, 'btc_due'):
+            return pay_request
+        else:
+            raise OrphanPaymentError
 
 
 class Payment(models.Model):
 
+    STATUS_CHOICES = (
+        ('paid','Paid'),
+        ('underpaid', 'Underpaid'),
+        ('overpaid', 'Overpaid'),
+        ('orphan_payment','OrphanPaymentError')
+    )
+
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
-    # price_id        = models.ForeignKey(to=CryptoPrice, on_delete=models.CASCADE)
+    pay_request_id  = models.ForeignKey(to=PaymentRequest, on_delete=models.CASCADE, blank=True, null=True)
     btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
     cad_exchange    = models.DecimalField(decimal_places=2, max_digits=10, default=0)
-    is_problem      = models.BooleanField(default=False)
+    status          = models.CharField(max_length=255, choices=STATUS_CHOICES)
     date_created    = models.DateTimeField(auto_now_add=True)
 
     objects = PaymentManager()
 
 
-    def send_payment_details(self, details):
+    def _create_status(self, pay_request):
+        """Sets the status attribute.
+        Confirms if the BTC we received is (roughly) the same as the BTC due.
+        """
+        btc_min_due = pay_request.btc_due * settings.BTC_MIN_ALLOWANCE
+        overpay = btc_min_due * settings.OVERPAYMENT_THRESH
 
+        if btc_min_due <= self.btc_confirmed < overpay:
+            self.status = 'paid'
+        elif self.btc_confirmed < btc_min_due:
+            self.status = 'underpaid'
+        elif self.btc_confirmed >= overpay:
+            self.status = 'overpaid'
+        return
+
+    def send_payment_details(self, details):
+        """No return
+        Sends serialized data to vendor, confirming them of successful payment.
+        """
         headers = {
         'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0',
         'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -366,32 +438,35 @@ class Payment(models.Model):
         'Upgrade-Insecure-Requests':'1',
         }
         # url = self.address_id.wallet_id.vendor_url
-        url = 'http://localhost:8080' #TESTING PURPOSES ONLY!
+        url = 'http://localhost:8000/crypto/api/notify/' #TESTING PURPOSES ONLY!
         r = requests.post(url=url, data=details, headers=headers)
         if r.status_code == 404:
             raise SendPaymentDetailsError
         return
 
 
-    def check_cad_acceptable(self):
-        """
-        Returns bool.
+    def is_cad_acceptable(self) -> bool:
+        """Returns bool.
         Compares the CAD amount received with the CAD amount requested.
         If CAD received is too low self.is_problem becomes True.
         """
-        pay_request = PaymentRequest.objects.filter(address_id=self.address_id).last()
-        
-        if self.cad_exchange >= pay_request.cad_due:
+        if self.cad_exchange >= self.pay_request_id.cad_due:
             return True
-
-        if self.cad_exchange >= pay_request.cad_min_allowance():
+        if self.cad_exchange >= self.pay_request_id.cad_min_allowance():
             return True
         else:
-            self.is_problem = True
+            #TODO what to do instead of self.is_problem?
+            # self.is_problem = True
             self.save()
 
         return False
 
+
+    def is_btc_acceptable(self) -> bool:
+        """Checks if BTC payment is within 
+        acceptable range of where it should be. 
+        This should be close to 100%.
+        """
 
 
 
@@ -401,7 +476,7 @@ class WalletApiFailure(models.Model):
     
     error           = models.CharField(max_length=255)
     date_created    = models.DateTimeField(auto_now_add=True)
-    notes           = models.TextField(blank=True, null=True)
+    details         = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = 'Wallet API Failure'

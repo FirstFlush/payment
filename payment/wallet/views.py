@@ -7,18 +7,48 @@ from rest_framework.authentication import SessionAuthentication, BasicAuthentica
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.renderers import JSONRenderer
+from rest_framework.parsers import JSONParser
 
 from .errors import SendPaymentDetailsError
-from .models import AddressNotification, CryptoAddress, CryptoWallet, PaymentRequest, Payment, WalletApiFailure
-from .serializers import PayRequestSerializer, PaymentSerializer
+from .models import Balance, CryptoAddress, CryptoWallet, PaymentRequest, Payment, WalletApiFailure
+from .serializers import NotificationSerializer, PayRequestSerializer, PaymentSerializer, TestSerializer
 from payment.price.models import CryptoCoin, CryptoPrice
 
 import decimal
 import json
+import hmac
+import hashlib
+import io
 
 from django.urls import reverse
 from django.conf import settings
 from jsonrpclib import Server
+
+
+# # better to use the django-rest-framework-hmac library
+# def _hmac(key, message):
+#     key = bytes(key, 'utf-8')
+#     message = bytes(message, 'utf-8')
+#     dig = hmac.new(key, message, hashlib.sha256)
+#     return dig.hexdigest()
+
+
+class SerializerTest(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        # stream = io.BytesIO(request.data)
+        # data = JSONParser().parse(stream)
+        serializer = TestSerializer(data=data)
+        if serializer.is_valid():
+            resp =serializer.validated_data
+        else:
+            resp = serializer.errors
+        print(resp)
+        return Response(resp)
 
 
 class TestView(APIView):
@@ -42,14 +72,14 @@ class TestView(APIView):
 
 
 class PayRequestView(APIView):
-    authentication_classes = [TokenAuthentication,]
-    permission_classes = [IsAuthenticated]
-    # authentication_classes = []
-    # permission_classes = []
+    # authentication_classes = [TokenAuthentication,]
+    # permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = []
 
     def post(self, request, *args, **kwargs):
 
-        print(request.auth)
+        # print(request.auth)
         data = request.data
         wallet = get_object_or_404(CryptoWallet, slug='greatkart-wallet')
         wallet.load_wallet()
@@ -72,19 +102,16 @@ class PayRequestView(APIView):
 
         pr = PaymentRequest.objects.create(
             address_id = address,
-            # price_id = price,
             btc_due = btc_price,
             cad_due = cad_price,
         )
 
-        print()
-        print('notifying: ', reverse('notify'))
-        address.notify('http://localhost:8000/wallet_api/notify/')
-        print()
+        address.notify('http://localhost:8888/wallet_api/notify/')
 
         serializer = PayRequestSerializer(pr)
+        # json = JSONRenderer().render(serializer.data)
+        # return Response(json)
         return Response(serializer.data)
-
 
 
 class NotifyView(APIView):
@@ -94,28 +121,50 @@ class NotifyView(APIView):
 
     def post(self, request, *args, **kwargs):
 
+        # data = {'address':'bc1qvvedv5lql9094pua5fjl0c5fh53nf0tepnvahr','status':'1232132321'}
+        # data = {'address':'bc1qufrj36uzyl3l5ap9jr08akrk2mtla7e045gayd','status':'6454546454'}
         data = request.data
-        print('NotifyView data: ', data)
+        serializer = NotificationSerializer(data=data)
+        if serializer.is_valid(raise_exception=True):
 
-        address = get_object_or_404(CryptoAddress, address=data['address'])
+            print('notify data incoming: ', data)
+            address = get_object_or_404(CryptoAddress, address=serializer.validated_data['address'])
 
-        wallet = get_object_or_404(CryptoWallet, id=address.wallet_id.id)
-        wallet.load_wallet()
-        balance = address.get_balance()
+            wallet = get_object_or_404(CryptoWallet, id=address.wallet_id.id)
+            wallet.load_wallet()
+            address_balance = address.get_balance()
 
-        notification = AddressNotification.objects.create(
-            address_id = address,
-            btc_unconfirmed = decimal.Decimal(balance['unconfirmed']),
-            btc_confirmed = decimal.Decimal(balance['confirmed'])
-        )
-        if notification.btc_confirmed > 0:
-            payment = Payment.objects.payment_received(address=address, btc=notification.btc_confirmed)
-            if payment.check_cad_acceptable() == True:
-                address.notify_stop()
-                serializer = PaymentSerializer(payment)
-                payment.send_payment_details(serializer.data)
+            balance = Balance(
+                address_id = address,
+                btc_unconfirmed = decimal.Decimal(address_balance['unconfirmed']),
+                btc_confirmed = decimal.Decimal(address_balance['confirmed']),
+                status = serializer.validated_data['status']
+            )
+            if balance.is_status_duplicate() == True:
+                print('duplicate status')
+                pass
+            else:
+                balance.save()
+                if balance.is_confirmed_balance_change() == True:
+                    payment = Payment.objects.payment_received(address=address, btc=balance.btc_confirmed)
+                    print('Payment: ', payment.__dict__)
+                    if payment.is_cad_acceptable() == True:
+                        address.notify_stop()
+                        serializer = PaymentSerializer(payment)
+                        json = JSONRenderer().render(serializer.data)
+                        print('rendered JSON: ', json)
+                        payment.send_payment_details(json)
 
         return Response()
+
+
+
+
+
+
+
+
+
 
 
 

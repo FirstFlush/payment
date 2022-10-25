@@ -132,8 +132,7 @@ class CryptoPriceManager(models.Manager):
 
 
 class CryptoPrice(models.Model):
-    '''1 BTC = self.price'''
-
+    """1 BTC = self.price"""
     coin_fk         = models.ForeignKey(to=CryptoCoin, on_delete=models.CASCADE)
     price           = models.DecimalField(decimal_places=2, max_digits=20)
     date_created    = models.DateTimeField(auto_now_add=True)

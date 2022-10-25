@@ -1,4 +1,9 @@
 
+class OrphanPaymentError(Exception):
+    """Raised when PaymentRequest can not be found that matches the Payment received."""
+    pass
+
+
 class SendPaymentDetailsError(Exception):
     """Raised when sending payment details to vendor URL returns 404 error"""
     pass
