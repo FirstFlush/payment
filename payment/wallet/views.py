@@ -12,8 +12,9 @@ from rest_framework.parsers import JSONParser
 
 from .errors import SendPaymentDetailsError
 from .models import Balance, CryptoAddress, CryptoWallet, PaymentRequest, Payment, WalletApiFailure
-from .serializers import NotificationSerializer, PayRequestSerializer, PaymentSerializer, TestSerializer
+from .serializers import NewRequestSerializer, NotificationSerializer, PayRequestSerializer, PaymentSerializer, TestSerializer
 from payment.price.models import CryptoCoin, CryptoPrice
+from payment.price.errors import OldPriceError
 
 import decimal
 import json
@@ -25,6 +26,8 @@ from django.urls import reverse
 from django.conf import settings
 from jsonrpclib import Server
 
+
+# from rest_framework_hmac import 
 
 # # better to use the django-rest-framework-hmac library
 # def _hmac(key, message):
@@ -81,15 +84,23 @@ class PayRequestView(APIView):
 
         # print(request.auth)
         data = request.data
+
+        serializer = NewRequestSerializer(data=data)
+        if serializer.is_valid(raise_exception=True):
+            valid_data =serializer.validated_data
+
         wallet = get_object_or_404(CryptoWallet, slug='greatkart-wallet')
         wallet.load_wallet()
-        cad_price = data['cad']
+        cad_price = valid_data['cad']
         #TODO: add datetime in request.data! so we can compare it to datetime of first address notification
 
-        # get price:
-        # TODO: check to make sure price is < 15 minutes ago.
-        # TODO: if price is not less than 15 mins, raise error and do another API call 
         price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
+        # try:
+        #     price.check_time()
+        # except OldPriceError:
+               # TODO: some function that tries all the price-fetching APIs? hmm 
+        #     return HttpResponseBadRequest()
+
         btc_price = price.cad_to_btc(decimal.Decimal(cad_price))
         
         server = Server(settings.JSON_RPC)
@@ -114,6 +125,12 @@ class PayRequestView(APIView):
         return Response(serializer.data)
 
 
+# NotifyView request.data:
+# =====================
+# data = {
+#   'address': 'bc1q2y0er7czna4qyewyvnsjpthkv6309tpae4mruy', 
+#   'status': 'c5306e296471bbeb2f7a17ee169634be1a88689238facb03c38cf70397ef0fdf'
+# }
 class NotifyView(APIView):
 
     authentication_classes = []
@@ -121,9 +138,9 @@ class NotifyView(APIView):
 
     def post(self, request, *args, **kwargs):
 
+        data = request.data
         # data = {'address':'bc1qvvedv5lql9094pua5fjl0c5fh53nf0tepnvahr','status':'1232132321'}
         # data = {'address':'bc1qufrj36uzyl3l5ap9jr08akrk2mtla7e045gayd','status':'6454546454'}
-        data = request.data
         serializer = NotificationSerializer(data=data)
         if serializer.is_valid(raise_exception=True):
 
@@ -138,22 +155,22 @@ class NotifyView(APIView):
                 address_id = address,
                 btc_unconfirmed = decimal.Decimal(address_balance['unconfirmed']),
                 btc_confirmed = decimal.Decimal(address_balance['confirmed']),
-                status = serializer.validated_data['status']
+                txid = serializer.validated_data['status']
             )
-            if balance.is_status_duplicate() == True:
-                print('duplicate status')
+            if balance.is_txid_duplicate() == True:
+                print('duplicate TXID')
                 pass
             else:
                 balance.save()
                 if balance.is_confirmed_balance_change() == True:
                     payment = Payment.objects.payment_received(address=address, btc=balance.btc_confirmed)
                     print('Payment: ', payment.__dict__)
-                    if payment.is_cad_acceptable() == True:
+                    if payment.is_btc_acceptable() == True:
                         address.notify_stop()
-                        serializer = PaymentSerializer(payment)
-                        json = JSONRenderer().render(serializer.data)
-                        print('rendered JSON: ', json)
-                        payment.send_payment_details(json)
+                    serializer = PaymentSerializer(payment)
+                    # json = JSONRenderer().render(serializer.data)
+                    # print('rendered JSON: ', json)
+                    payment.send_payment_details(serializer.data)
 
         return Response()
 

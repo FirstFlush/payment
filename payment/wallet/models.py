@@ -17,28 +17,21 @@ from math import isclose
 from jsonrpclib import Server
 import hashlib
 import requests
+import subprocess
+# import asyncio
+# import time
 
 
-def decimalize(dictionary):
-    '''
-    dict -> dict
+def _start_daemon():
+    """Starts the electrum daemon."""
+    subprocess.run([f"{settings.ELECTRUM}", 'daemon', '-d'])
 
-    Used to convert number strings like '0.0035132' 
-    in electrum CLI responses into dictionaries.
-    '''
-    for key, value in dictionary.items():
-        try:
-            dictionary[key] = decimal.Decimal(value)
-        except decimal.InvalidOperation:
-            pass
-
-    return dictionary
 
 
 class CryptoWalletManager(models.Manager):
 
     def create_wallet(self, wallet_name, account, is_vendor):
-        '''Create a brand new wallet'''
+        """Create a brand new wallet"""
 
         new_wallet = CryptoWallet(
             accuont_id=account,
@@ -50,7 +43,6 @@ class CryptoWalletManager(models.Manager):
         create_wallet = json.loads(os.popen(f"{settings.ELECTRUM} create -w {new_wallet.slug}").read())
         seed = create_wallet['seed']
         os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.slug}")
-        # new_wallet.mpk = json.loads(os.popen(f"{settings.ELECTRUM} getmpk -w {new_wallet.slug}").read())
         new_wallet.load_wallet()
         # new_wallet.vendor_key = new_wallet.vendor_keygen(new_wallet.mpk)
         new_wallet.save()
@@ -59,8 +51,7 @@ class CryptoWalletManager(models.Manager):
 
 
     def restore_wallet(self, account, wallet_name, is_vendor, mpk):
-        '''Restores a wallet from MPK'''
-
+        """Restores a wallet from MPK"""
         new_wallet = CryptoWallet(
             account_id=account,
             wallet_name=wallet_name,
@@ -68,9 +59,7 @@ class CryptoWalletManager(models.Manager):
             slug=slugify(wallet_name),
             mpk=mpk
         )
-
         restored_wallet = os.popen(f"{settings.ELECTRUM} restore {new_wallet.mpk} -w {new_wallet.path()}").read()
-
         new_wallet.load_wallet()
         # os.popen(f"{settings.ELECTRUM} load_wallet -w {new_wallet.path()}")
         # new_wallet.vendor_key = new_wallet.vendor_keygen()
@@ -112,9 +101,13 @@ class CryptoWallet(models.Model):
 
 
     def load_wallet(self):
-        '''Loads the wallet in the Electrum daemon'''
+        """Loads the wallet in the Electrum daemon"""
         server = Server(settings.JSON_RPC)
-        server.load_wallet(wallet_path=self.path(), password=settings.WALLET_PASS)
+        try:
+            server.load_wallet(wallet_path=self.path(), password=settings.WALLET_PASS)
+        except ConnectionRefusedError:
+            _start_daemon()
+            server.load_wallet(wallet_path=self.path(), password=settings.WALLET_PASS)
         return
 
 
@@ -127,6 +120,13 @@ class CryptoWallet(models.Model):
 
     def __str__(self):
         return self.wallet_name
+
+
+    def is_mine(self, address):
+        #TODO: testing!
+        """Confirms address does indeed belong to me"""
+        server = Server(settings.JSON_RPC)
+        return server.ismine(address=address, wallet=self.path())
 
 
     def listaddresses(self):
@@ -171,7 +171,7 @@ class CryptoAddress(models.Model):
         """Electrum notify command. Returns boolean"""
         server = Server(settings.JSON_RPC)
         notification =server.notify(self.address, url)
-        return notification
+        return
 
 
     def notify_stop(self):
@@ -309,7 +309,7 @@ class Balance(models.Model):
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
     btc_unconfirmed = models.DecimalField(decimal_places=7, max_digits=10, default=0)
     btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
-    status          = models.CharField(max_length=255)
+    txid            = models.CharField(max_length=255)
     date_created    = models.DateTimeField(auto_now_add=True)
 
 
@@ -345,12 +345,12 @@ class Balance(models.Model):
         return False
 
 
-    def is_status_duplicate(self):
-        """Returns True if a recorded Balance has the same status value. 
+    def is_txid_duplicate(self):
+        """Returns True if a recorded Balance has the same status value (TXID). 
         This method exists because for some reason Electrum sends 
         balance-change notification twice. Dunny why.
         """
-        prev_balance = Balance.objects.filter(address_id=self.address_id, status=self.status).exclude(id=self.id).last()
+        prev_balance = Balance.objects.filter(address_id=self.address_id, txid=self.txid).exclude(id=self.id).last()
         if hasattr(prev_balance, 'status'):
             return True
         return False
@@ -374,7 +374,7 @@ class PaymentManager(models.Manager):
             new_payment.status = 'orphan_payment'
         else:
             new_payment.pay_request_id = pay_request
-            new_payment._create_status(pay_request)
+            new_payment._create_status()
         new_payment.save()
         return new_payment
 
@@ -384,7 +384,7 @@ class PaymentManager(models.Manager):
         returns OrphanPaymentError if no PayRequest object 
         is found."""
         pay_request = PaymentRequest.objects.filter(address_id=address).last()
-        if hasattr(pay_request, 'btc_due'):
+        if pay_request != None:
             return pay_request
         else:
             raise OrphanPaymentError
@@ -396,7 +396,7 @@ class Payment(models.Model):
         ('paid','Paid'),
         ('underpaid', 'Underpaid'),
         ('overpaid', 'Overpaid'),
-        ('orphan_payment','OrphanPaymentError')
+        ('orphan','Orphan')
     )
 
     address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
@@ -409,40 +409,46 @@ class Payment(models.Model):
     objects = PaymentManager()
 
 
-    def _create_status(self, pay_request):
+    def _create_status(self):
         """Sets the status attribute.
         Confirms if the BTC we received is (roughly) the same as the BTC due.
         """
-        btc_min_due = pay_request.btc_due * settings.BTC_MIN_ALLOWANCE
-        overpay = btc_min_due * settings.OVERPAYMENT_THRESH
+        if self.pay_request_id == None:
+            self.status = 'orphan'
+            return
+        crypto_due = self.pay_request_id.btc_due * settings.BTC_MIN_ALLOWANCE
+        overpay = crypto_due * settings.OVERPAYMENT_THRESH
 
-        if btc_min_due <= self.btc_confirmed < overpay:
+        if crypto_due <= self.btc_confirmed < overpay:
             self.status = 'paid'
-        elif self.btc_confirmed < btc_min_due:
+        elif self.btc_confirmed < crypto_due:
             self.status = 'underpaid'
-        elif self.btc_confirmed >= overpay:
+        elif self.btc_confirmed >= crypto_due * overpay:
             self.status = 'overpaid'
         return
 
-    def send_payment_details(self, details):
-        """No return
+
+    def send_payment_details(self, details) -> bool:
+        """Returns True if details successfully sent.
         Sends serialized data to vendor, confirming them of successful payment.
         """
         headers = {
-        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0',
-        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language':'en-US,en;q=0.5',
-        'Accept-Encoding':'gzip, deflate',
-        'Dnt':'1',
-        'Connection':'keep-alive',
-        'Upgrade-Insecure-Requests':'1',
+        # 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0',
+        # 'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        # 'Accept-Language':'en-US,en;q=0.5',
+        # 'Accept-Encoding':'gzip, deflate',
+        # 'Dnt':'1',
+        # 'Connection':'keep-alive',
+        # 'Upgrade-Insecure-Requests':'1',
+        'Accepts': 'application/json',
+
         }
         # url = self.address_id.wallet_id.vendor_url
         url = 'http://localhost:8000/crypto/api/notify/' #TESTING PURPOSES ONLY!
         r = requests.post(url=url, data=details, headers=headers)
-        if r.status_code == 404:
+        if r.status_code != 200:
             raise SendPaymentDetailsError
-        return
+        return True
 
 
     def is_cad_acceptable(self) -> bool:
@@ -464,10 +470,34 @@ class Payment(models.Model):
 
     def is_btc_acceptable(self) -> bool:
         """Checks if BTC payment is within 
-        acceptable range of where it should be. 
-        This should be close to 100%.
+        acceptable minimum allowance, as defined by the vendor. 
+        **This min-allowance number should be close to 100%. 0.98 for now.
         """
+        try:
+            min_allow = self.pay_request_id.btc_due * settings.BTC_MIN_ALLOWANCE
+            if self.btc_confirmed >= min_allow:
+                return True
+            else:
+                return False
+        except AttributeError:
+            return True
 
+
+        # if not hasattr(self.pay_request_id, 'btc_due'):
+        #     return True
+        # min_allow = self.pay_request_id.btc_due * settings.BTC_MIN_ALLOWANCE
+        # if self.btc_confirmed >= min_allow:
+        #     return True
+        # else:
+        #     return False
+
+
+    # address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
+    # pay_request_id  = models.ForeignKey(to=PaymentRequest, on_delete=models.CASCADE, blank=True, null=True)
+    # btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
+    # cad_exchange    = models.DecimalField(decimal_places=2, max_digits=10, default=0)
+    # status          = models.CharField(max_length=255, choices=STATUS_CHOICES)
+    # date_created    = models.DateTimeField(auto_now_add=True)
 
 
 

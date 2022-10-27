@@ -2,7 +2,7 @@ from logging import NOTSET
 from django.db import models
 from django.conf import settings 
 
-from .errors import CoinGeckoError, CoinMarketCapError
+from .errors import CoinGeckoError, CoinMarketCapError, OldPriceError
 
 from requests import Session
 from requests.exceptions import ConnectionError, Timeout, TooManyRedirects
@@ -157,7 +157,7 @@ class CryptoPrice(models.Model):
         if self.date_created.replace(tzinfo=None) > time_threshold:
             return True
         else:
-            return False
+            raise OldPriceError
 
 
     def __str__(self):

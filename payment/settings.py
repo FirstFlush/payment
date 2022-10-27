@@ -33,7 +33,9 @@ environ.Env.read_env()
 # MY CONSTANTS:
 ELECTRUM                = env('ELECTRUM_PATH')
 WALLET_DIR              = env('WALLET_DIR')
-PAY_REQUEST_EXPIRY      = 604800 # seconds. 7 days
+TIME_CHECK              = 7 # minutes
+DELETE_PRICE_DAYS       = 5 # delete CryptoPrice objects older than this many days.
+PAY_REQUEST_EXPIRY      = 259200 # seconds. 3 days
 JSON_RPC                = f"http://{env('RPC_USER')}:{env('RPC_PASS')}@127.0.0.1:{env('RPC_PORT')}"
 WALLET_PASS             = env('WALLET_PASS')
 COINS_LONG              = env('COINS_LONG')
@@ -42,8 +44,6 @@ COINMARKETCAP_API_KEY   = env('COINMARKETCAP_API_KEY')
 CAD_MIN_ALLOWANCE       = decimal.Decimal(0.95)
 BTC_MIN_ALLOWANCE       = decimal.Decimal(0.98)
 OVERPAYMENT_THRESH      = decimal.Decimal(1.2)
-TIME_CHECK              = 7 # minutes
-DELETE_PRICE_DAYS       = 5 # delete CryptoPrice objects older than this many days.
 
 # django-cryptography module settings:
 CRYPTOGRAPHY_BACKEND = default_backend()

@@ -9,7 +9,10 @@ class TestSerializer(serializers.Serializer):
 
 
 
+class NewRequestSerializer(serializers.Serializer):
 
+    cad = serializers.DecimalField(decimal_places=2, max_digits=10)
+    # hash = serializers.CharField(max_length=255)
 
 
 class PayRequestSerializer(serializers.ModelSerializer):
@@ -31,7 +34,7 @@ class PayRequestSerializer(serializers.ModelSerializer):
 
 class NotificationSerializer(serializers.Serializer):
     address         = serializers.CharField(max_length=255)
-    status          = serializers.CharField(max_length=255)
+    status          = serializers.CharField(max_length=255) #TXID
     # btc_unconfirmed = serializers.DecimalField(decimal_places=7, max_digits=10, default=0)
     # btc_confirmed   = serializers.DecimalField(decimal_places=7, max_digits=10, default=0)
 
@@ -48,10 +51,8 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = [
             'address',
-            # 'exg_rate',
             'btc_confirmed',
             'cad_exchange',
-            # 'is_problem',
+            'status',
             'date_created',
-            # 'vendor_url',
         ]
