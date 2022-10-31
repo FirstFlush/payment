@@ -20,7 +20,7 @@ from datetime import timedelta
 from rest_framework.settings import api_settings
 
 
-# AUTH_USER_MODEL = 'account.Account'
+AUTH_USER_MODEL = 'account.Account'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -90,6 +90,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '192.168.1.65',
+    'testserver',
     ]
 
 #APPEND_SLASH = False
@@ -107,13 +108,14 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'knox',
     'django_extensions',
-    'rest_framework_hmac.hmac_key',
+    # 'rest_framework_hmac.hmac_key',
     'psycopg2',
     'django_celery_beat',
     'payment.wallet',
     'payment.price',
     'payment.error',
     'payment.account',
+    'payment.hmac_auth',
 ]
 
 MIDDLEWARE = [

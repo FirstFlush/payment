@@ -1,11 +1,11 @@
-# import os
+import os
 
-# from electrum.electrum.commands import Commands
-# from electrum.electrum.simple_config import SimpleConfig
-# from electrum.electrum.network import Network
-# from electrum.electrum.daemon import Daemon
+from electrum.electrum.commands import Commands
+from electrum.electrum.simple_config import SimpleConfig
+from electrum.electrum.network import Network
+from electrum.electrum.daemon import Daemon
 
-# cmd = Commands()
+cmd = Commands()
 import decimal
 from django.urls import reverse
 

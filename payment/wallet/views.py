@@ -1,5 +1,10 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponseBadRequest, HttpResponse
+from django.contrib.auth.models import User
+from django.urls import reverse
+from django.conf import settings
+from jsonrpclib import Server
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -10,22 +15,21 @@ from rest_framework.views import APIView
 from rest_framework.renderers import JSONRenderer
 from rest_framework.parsers import JSONParser
 
+# from payment.hmac_auth.client import HMACSigner
+# from payment.hmac_auth.authentication import HMACAuthentication
+
 from .errors import SendPaymentDetailsError
 from .models import Balance, CryptoAddress, CryptoWallet, PaymentRequest, Payment, WalletApiFailure
 from .serializers import NewRequestSerializer, NotificationSerializer, PayRequestSerializer, PaymentSerializer, TestSerializer
+from payment.account.models import Account
+# from payment.hmac_auth.authentication import HMACAuthentication
+
 from payment.price.models import CryptoCoin, CryptoPrice
 from payment.price.errors import OldPriceError
 
+# from rest_framework_hmac.authentication import HMACAuthentication
 import decimal
-import json
-import hmac
-import hashlib
-import io
-
-from django.urls import reverse
-from django.conf import settings
-from jsonrpclib import Server
-
+from datetime import datetime 
 
 # from rest_framework_hmac import 
 
@@ -35,6 +39,56 @@ from jsonrpclib import Server
 #     message = bytes(message, 'utf-8')
 #     dig = hmac.new(key, message, hashlib.sha256)
 #     return dig.hexdigest()
+
+
+# def _add_signature(data):
+#     """Adds the HMAC signature as an extra key on the dictionary to be sent out as JSON"""
+#     account = Account.objects.get(username='leaf')
+#     hmac_key = HMACSigner(account)
+#     # print('DATA: ', data)
+#     signature = hmac_key.calc_signature(data)
+#     key = account.hmac_key.key
+#     data['signature'] = signature
+#     data['key'] = key
+#     print('signature received: ', signature)
+#     return data
+
+
+class TestView(APIView):
+    # authentication_classes = []
+    # authentication_classes = [HMACAuthentication,]
+    permission_classes = []
+
+    def post(self, request, *args, **kwargs):
+        # d = {
+        #     'address':'bc1fdjskafjsadlfjdsaklfjzfsda',
+        #     'btc_confirmed':'100',
+        #     'cad_exchange':'1000',
+        #     'status':'paid',
+        #     # 'date_created': datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S"),
+        # }
+        # _add_signature(d)
+        # user = User.objects.create(
+        #     username = 'club',
+        #     password = 'asdfasd',
+        #     email = 'dffub@blub.com'
+        # )
+        # print(user)
+        return Response()
+
+
+        # payment = Payment.objects.last()
+        # serializer = PaymentSerializer(payment)
+        # try:
+        #     payment.send_payment_details(serializer.data)
+        # except SendPaymentDetailsError as e:
+        #     error = e.__class__.__name__
+        #     WalletApiFailure.objects.create(
+        #         error=error,
+        #         notes = f"payment ID: {payment.id}"
+        #     )
+        # return Response(serializer.data)
+
 
 
 class SerializerTest(APIView):
@@ -53,25 +107,6 @@ class SerializerTest(APIView):
         print(resp)
         return Response(resp)
 
-
-class TestView(APIView):
-    authentication_classes = []
-    permission_classes = []
-
-    def get(self, request, *args, **kwargs):
-
-        payment = Payment.objects.last()
-        serializer = PaymentSerializer(payment)
-        try:
-            payment.send_payment_details(serializer.data)
-        except SendPaymentDetailsError as e:
-            error = e.__class__.__name__
-            WalletApiFailure.objects.create(
-                error=error,
-                notes = f"payment ID: {payment.id}"
-            )
-        
-        return Response(serializer.data)
 
 
 class PayRequestView(APIView):
@@ -168,8 +203,6 @@ class NotifyView(APIView):
                     if payment.is_btc_acceptable() == True:
                         address.notify_stop()
                     serializer = PaymentSerializer(payment)
-                    # json = JSONRenderer().render(serializer.data)
-                    # print('rendered JSON: ', json)
                     payment.send_payment_details(serializer.data)
 
         return Response()

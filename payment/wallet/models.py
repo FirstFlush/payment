@@ -77,7 +77,7 @@ class CryptoWallet(models.Model):
     slug        = models.SlugField(max_length=255, unique=True)
     is_vendor   = models.BooleanField(default=False)
     is_active   = models.BooleanField(default=True)
-    vendor_url  = models.URLField(max_length=255)
+    vendor_url  = models.URLField(max_length=255, null=True, blank=True)
 
     objects = CryptoWalletManager()
 
