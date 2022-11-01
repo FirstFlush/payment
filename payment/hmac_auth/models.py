@@ -1,9 +1,11 @@
-import binascii
-import os
-
 from django.conf import settings
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+
+from payment.account.models import Account
+
+import binascii
+import os
 
 
 class HMACKey(models.Model):
@@ -17,10 +19,10 @@ class HMACKey(models.Model):
         """
         return binascii.hexlify(os.urandom(20)).decode()
 
-    key     = models.CharField(_("Key"), primary_key=True, max_length=40, default=generate_key)
-    secret  = models.CharField(_("Secret"), max_length=40, default=generate_key)
-    user    = models.OneToOneField(settings.AUTH_USER_MODEL, related_name='hmac_key', on_delete=models.CASCADE, verbose_name=_("User"))
-    created = models.DateTimeField(_("Created"), auto_now_add=True)
+    key         = models.CharField(_("Key"), primary_key=True, max_length=40, default=generate_key)
+    secret      = models.CharField(_("Secret"), max_length=40, default=generate_key)
+    account_id  = models.OneToOneField(to=Account, related_name='hmac_key', on_delete=models.CASCADE, verbose_name=_("User"))
+    created     = models.DateTimeField(_("Created"), auto_now_add=True)
 
     # class Meta:
     #     # Only create a DB table for this Model if this app is registered

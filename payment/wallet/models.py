@@ -428,24 +428,14 @@ class Payment(models.Model):
         return
 
 
-    def send_payment_details(self, details) -> bool:
+    def send_payment_data(self, data, headers) -> bool:
         """Returns True if details successfully sent.
         Sends serialized data to vendor, confirming them of successful payment.
         """
-        headers = {
-        # 'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0',
-        # 'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        # 'Accept-Language':'en-US,en;q=0.5',
-        # 'Accept-Encoding':'gzip, deflate',
-        # 'Dnt':'1',
-        # 'Connection':'keep-alive',
-        # 'Upgrade-Insecure-Requests':'1',
-        'Accepts': 'application/json',
-
-        }
         # url = self.address_id.wallet_id.vendor_url
         url = 'http://localhost:8000/crypto/api/notify/' #TESTING PURPOSES ONLY!
-        r = requests.post(url=url, data=details, headers=headers)
+        # url = 'http://localhost:8888/wallet_api/test_receive/'
+        r = requests.post(url=url, data=data, headers=headers)
         if r.status_code != 200:
             raise SendPaymentDetailsError
         return True

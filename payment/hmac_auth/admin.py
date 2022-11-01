@@ -6,6 +6,7 @@ class HMACKeyAdmin(admin.ModelAdmin):
 
     list_display = [
         'key',
+        'account_id',
     ]
 
 

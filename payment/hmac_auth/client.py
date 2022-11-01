@@ -3,6 +3,23 @@ import hashlib
 import hmac
 import json
 
+from .models import HMACKey
+
+
+
+def hmac_sign(account, data=dict):
+    """Sign outgoing requests to Crypto API with HMAC key."""
+    hmac = HMACKey.objects.get(key=account.hmac_key.key)
+    signer = HMACSigner(account)
+    signature = signer.calc_signature(data)
+    headers = {
+        'vendor': hmac.key,
+        'signature': signature,
+    }
+    return headers
+
+
+
 
 class BaseHMAC(object):
     """
@@ -45,25 +62,19 @@ class HMACAuthenticator(BaseHMAC):
         Calculates the HMAC Signature based upon the headers and data
         """
         string_to_sign = self.string_to_sign(request)
-        return self._calc_signature_from_str(string_to_sign)
+        signature = self._calc_signature_from_str(string_to_sign)
+        return signature
 
     def string_to_sign(self, request):
         """
         Calcuates the string to sign using the HMAC secret
         """
-        headers = {
-            'method': request.method,
-            'hostname': request.META['REMOTE_ADDR'],
-            'path': request.META['PATH_INFO'],
-            'timestamp': request.META['Timestamp']
-        }
-        s = '{method}\n{hostname}\n{path}\n{timestamp}\n'.format(**headers)
-
+        s = ''
         # Don't add in case of a 'GET' request
         if getattr(request, 'data', None):
             s += json.dumps(request.data, separators=(',', ':'))
-
         return s
+
 
 
 class HMACSigner(BaseHMAC):
@@ -73,22 +84,22 @@ class HMACSigner(BaseHMAC):
     `HMACAuthenticator` relies on for calculating the HMAC
     Signatures
     """
-    def calc_signature(self, headers, data=None):
+    def calc_signature(self, data=dict):
         """
         Calculates the HMAC Signature based upon the headers and data
         """
-        string_to_sign = self.string_to_sign(headers, data)
-        return self._calc_signature_from_str(string_to_sign)
+        string_to_sign = self.string_to_sign(data)
+        signature = self._calc_signature_from_str(string_to_sign)
+        return signature
 
-    def string_to_sign(self, headers, data=None):
+
+    def string_to_sign(self, data=dict):
         """
         Calcuates the string to sign using the HMAC secret
-
         """
-        s = '{method}\n{hostname}\n{path}\n{timestamp}\n'.format(**headers)
-
+        s = ''
         # Don't add in case of a 'GET' request
         if data:
             s += json.dumps(data, separators=(',', ':'))
-
+            print(s)
         return s

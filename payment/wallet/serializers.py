@@ -38,6 +38,12 @@ class NotificationSerializer(serializers.Serializer):
     # btc_unconfirmed = serializers.DecimalField(decimal_places=7, max_digits=10, default=0)
     # btc_confirmed   = serializers.DecimalField(decimal_places=7, max_digits=10, default=0)
 
+    def validate_status(self, data):
+        print('bleh')
+        if data == None:
+        # if data['status'] == None or data['status'] == 'None':
+            data = 'None'
+        return
 
 
 

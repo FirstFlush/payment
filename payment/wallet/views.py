@@ -1,3 +1,4 @@
+from hmac import HMAC
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponseBadRequest, HttpResponse
 from django.contrib.auth.models import User
@@ -5,53 +6,48 @@ from django.urls import reverse
 from django.conf import settings
 from jsonrpclib import Server
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework import permissions
+# from rest_framework.decorators import api_view, permission_classes
+# from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication, TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.renderers import JSONRenderer
-from rest_framework.parsers import JSONParser
 
-# from payment.hmac_auth.client import HMACSigner
-# from payment.hmac_auth.authentication import HMACAuthentication
+from payment.hmac_auth.client import HMACSigner, hmac_sign
+from payment.hmac_auth.authentication import HMACAuthentication
 
 from .errors import SendPaymentDetailsError
 from .models import Balance, CryptoAddress, CryptoWallet, PaymentRequest, Payment, WalletApiFailure
 from .serializers import NewRequestSerializer, NotificationSerializer, PayRequestSerializer, PaymentSerializer, TestSerializer
 from payment.account.models import Account
-# from payment.hmac_auth.authentication import HMACAuthentication
 
 from payment.price.models import CryptoCoin, CryptoPrice
 from payment.price.errors import OldPriceError
 
-# from rest_framework_hmac.authentication import HMACAuthentication
 import decimal
 from datetime import datetime 
-
-# from rest_framework_hmac import 
-
-# # better to use the django-rest-framework-hmac library
-# def _hmac(key, message):
-#     key = bytes(key, 'utf-8')
-#     message = bytes(message, 'utf-8')
-#     dig = hmac.new(key, message, hashlib.sha256)
-#     return dig.hexdigest()
+import requests
 
 
-# def _add_signature(data):
-#     """Adds the HMAC signature as an extra key on the dictionary to be sent out as JSON"""
-#     account = Account.objects.get(username='leaf')
-#     hmac_key = HMACSigner(account)
-#     # print('DATA: ', data)
-#     signature = hmac_key.calc_signature(data)
-#     key = account.hmac_key.key
-#     data['signature'] = signature
-#     data['key'] = key
-#     print('signature received: ', signature)
-#     return data
+
+
+
+class TestReceiveView(APIView):
+    authentication_classes = [HMACAuthentication]
+    # authentication_classes = []
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        print('dis a get')
+        return Response()
+
+    def post(self, request, *args, **kwargs):
+        print('----****----****----****')
+        print('\twoooooow')
+        print('****----****----****----')
+
+        return Response()
 
 
 class TestView(APIView):
@@ -60,81 +56,59 @@ class TestView(APIView):
     permission_classes = []
 
     def post(self, request, *args, **kwargs):
-        # d = {
-        #     'address':'bc1fdjskafjsadlfjdsaklfjzfsda',
-        #     'btc_confirmed':'100',
-        #     'cad_exchange':'1000',
-        #     'status':'paid',
-        #     # 'date_created': datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S"),
-        # }
-        # _add_signature(d)
-        # user = User.objects.create(
-        #     username = 'club',
-        #     password = 'asdfasd',
-        #     email = 'dffub@blub.com'
-        # )
-        # print(user)
+
+        account = Account.objects.last()
+        hmac_signer = HMACSigner(account)
+
+        data = {
+            'cad': str(22.84),
+            # 'address':'bc1fdjskafjsadlfjdsaklfjzfsda',
+            # 'btc_confirmed':'100',
+            # 'cad_exchange':'1000',
+            # 'status':'paid',
+            # 'date_created': datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S"),
+        }
+        signature = hmac_signer.calc_signature(data=data)
+        print(signature)
+        headers = {
+            'signature'  : signature,
+            'vendor' : 'd5c8eecff17c1addd86106a2cb5365081d14477e'
+        }
+
+        url = 'http://192.168.1.65:8888/wallet_api/test_receive/'
+        requests.post(url, data=data, headers=headers)
+
+
         return Response()
 
 
-        # payment = Payment.objects.last()
-        # serializer = PaymentSerializer(payment)
-        # try:
-        #     payment.send_payment_details(serializer.data)
-        # except SendPaymentDetailsError as e:
-        #     error = e.__class__.__name__
-        #     WalletApiFailure.objects.create(
-        #         error=error,
-        #         notes = f"payment ID: {payment.id}"
-        #     )
-        # return Response(serializer.data)
 
-
-
-class SerializerTest(APIView):
-    authentication_classes = []
-    permission_classes = []
-
-    def post(self, request, *args, **kwargs):
-        data = request.data
-        # stream = io.BytesIO(request.data)
-        # data = JSONParser().parse(stream)
-        serializer = TestSerializer(data=data)
-        if serializer.is_valid():
-            resp =serializer.validated_data
-        else:
-            resp = serializer.errors
-        print(resp)
-        return Response(resp)
 
 
 
 class PayRequestView(APIView):
-    # authentication_classes = [TokenAuthentication,]
-    # permission_classes = [IsAuthenticated]
-    authentication_classes = []
-    permission_classes = []
+
+    authentication_classes = [HMACAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-
         # print(request.auth)
         data = request.data
-
         serializer = NewRequestSerializer(data=data)
         if serializer.is_valid(raise_exception=True):
-            valid_data =serializer.validated_data
-
-        wallet = get_object_or_404(CryptoWallet, slug='greatkart-wallet')
+            valid_data = serializer.validated_data
+        wallet = get_object_or_404(CryptoWallet, slug='leaf-wallet')
         wallet.load_wallet()
         cad_price = valid_data['cad']
-        #TODO: add datetime in request.data! so we can compare it to datetime of first address notification
+        #TODO: add datetime in request.data! so i can compare it to datetime of first address notification
 
         price = CryptoPrice.objects.filter(coin_fk__coin_name='bitcoin').last()
-        # try:
-        #     price.check_time()
-        # except OldPriceError:
-               # TODO: some function that tries all the price-fetching APIs? hmm 
-        #     return HttpResponseBadRequest()
+        try:
+            price.check_time()
+        except OldPriceError:
+            print('old price error! fetch updated price!')
+            #    TODO: some function that tries all the price-fetching APIs? hmm 
+            return HttpResponseBadRequest()
 
         btc_price = price.cad_to_btc(decimal.Decimal(cad_price))
         
@@ -173,11 +147,26 @@ class NotifyView(APIView):
 
     def post(self, request, *args, **kwargs):
 
+        #-------------------------------------------------
+        # payment = Payment.objects.last()
+        # payment_data = {
+        #     'address': 'bc1qmma8ls3qwa9vv72nynfr8829u6xxydg3u89jr8', 
+        #     'btc_confirmed': '0.0001885', 
+        #     'cad_exchange': '5.00', 
+        #     'status': 'paid', 
+        #     'date_created': '2022-10-18T00:06:22.953730Z'
+        # }
+        # vendor = Account.objects.get(id=2)
+        # headers = hmac_sign(vendor, payment_data)
+        # payment.send_payment_data(payment_data, headers)
+        # return Response()
+        #-------------------------------------------------
+
         data = request.data
         # data = {'address':'bc1qvvedv5lql9094pua5fjl0c5fh53nf0tepnvahr','status':'1232132321'}
-        # data = {'address':'bc1qufrj36uzyl3l5ap9jr08akrk2mtla7e045gayd','status':'6454546454'}
         serializer = NotificationSerializer(data=data)
-        if serializer.is_valid(raise_exception=True):
+        # serializer.validate_status(data['status'])
+        if serializer.is_valid():
 
             print('notify data incoming: ', data)
             address = get_object_or_404(CryptoAddress, address=serializer.validated_data['address'])
@@ -203,7 +192,11 @@ class NotifyView(APIView):
                     if payment.is_btc_acceptable() == True:
                         address.notify_stop()
                     serializer = PaymentSerializer(payment)
-                    payment.send_payment_details(serializer.data)
+                    account = wallet.account_id
+                    headers = hmac_sign(account, serializer.data)
+                    payment.send_payment_data(serializer.data, headers)
+        else:
+            print('ELSE: ', request.data)
 
         return Response()
 
