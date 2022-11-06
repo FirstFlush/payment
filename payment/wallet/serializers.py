@@ -43,7 +43,7 @@ class NotificationSerializer(serializers.Serializer):
         if data == None:
         # if data['status'] == None or data['status'] == 'None':
             data = 'None'
-        return
+        return data
 
 
 

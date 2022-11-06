@@ -5,8 +5,9 @@ from django_cryptography.fields import encrypt
 from django.utils.text import slugify
 from .errors import WalletCloseError, WalletLoadError, SendPaymentDetailsError, OrphanPaymentError
 
-from payment.price.models import CryptoCoin, CryptoPrice
 from payment.account.models import Account
+from payment.plan.models import Plan
+from payment.price.models import CryptoCoin, CryptoPrice
 
 import json
 import decimal
@@ -69,15 +70,16 @@ class CryptoWalletManager(models.Manager):
 
 class CryptoWallet(models.Model):
 
-    coin_id     = models.ForeignKey(to=CryptoCoin, on_delete=models.CASCADE)
-    account_id  = models.ForeignKey(to=Account, on_delete=models.CASCADE)
-    wallet_name = models.CharField(max_length=255, unique=True)
-    # vendor_key  = models.CharField(max_length=255, unique=True)
-    mpk         = models.CharField(max_length=255, unique=True)
-    slug        = models.SlugField(max_length=255, unique=True)
-    is_vendor   = models.BooleanField(default=False)
-    is_active   = models.BooleanField(default=True)
-    vendor_url  = models.URLField(max_length=255, null=True, blank=True)
+    coin_id         = models.ForeignKey(to=CryptoCoin, on_delete=models.CASCADE)
+    account_id      = models.ForeignKey(to=Account, on_delete=models.CASCADE)
+    plan_id         = models.ForeignKey(to=Plan, on_delete=models.SET_NULL, null=True)
+    wallet_name     = models.CharField(max_length=255, unique=True)
+    wallet_code     = models.CharField(max_length=20)
+    mpk             = models.CharField(max_length=255, unique=True)
+    slug            = models.SlugField(max_length=255, unique=True)
+    is_vendor       = models.BooleanField(default=False)
+    is_active       = models.BooleanField(default=True)
+    notify_url      = models.URLField(max_length=255, null=True, blank=True)
 
     objects = CryptoWalletManager()
 
@@ -150,7 +152,8 @@ class CryptoAddress(models.Model):
     # objects = CryptoAddressManager()
 
     def __str__(self):
-        return f"{self.address[:8]}....{self.address[-4:]}"
+        return self.address
+        # return f"{self.address[:8]}....{self.address[-4:]}"
 
 
     def get_balance(self):
@@ -277,9 +280,9 @@ class PaymentRequest(models.Model):
 
     objects = RequestManager()
 
-    def __str__(self):
-        address = self.address_id.address
-        return f"{address[:8]}...{address[-4:]}: $ {self.cad_due}"
+    # def __str__(self):
+    #     address = self.address_id.address
+    #     return f"{address[:8]}...{address[-4:]}: $ {self.cad_due}"
 
 
     def cad_min_allowance(self):
@@ -432,12 +435,12 @@ class Payment(models.Model):
         """Returns True if details successfully sent.
         Sends serialized data to vendor, confirming them of successful payment.
         """
-        # url = self.address_id.wallet_id.vendor_url
-        url = 'http://localhost:8000/crypto/api/notify/' #TESTING PURPOSES ONLY!
-        # url = 'http://localhost:8888/wallet_api/test_receive/'
+        url = self.address_id.wallet_id.notify_url
+        # url = 'http://localhost:8000/crypto/api/notify/' #TESTING PURPOSES ONLY!
         r = requests.post(url=url, data=data, headers=headers)
         if r.status_code != 200:
             raise SendPaymentDetailsError
+
         return True
 
 
@@ -473,21 +476,21 @@ class Payment(models.Model):
             return True
 
 
-        # if not hasattr(self.pay_request_id, 'btc_due'):
-        #     return True
-        # min_allow = self.pay_request_id.btc_due * settings.BTC_MIN_ALLOWANCE
-        # if self.btc_confirmed >= min_allow:
-        #     return True
-        # else:
-        #     return False
 
 
-    # address_id      = models.ForeignKey(to=CryptoAddress, on_delete=models.CASCADE)
-    # pay_request_id  = models.ForeignKey(to=PaymentRequest, on_delete=models.CASCADE, blank=True, null=True)
-    # btc_confirmed   = models.DecimalField(decimal_places=7, max_digits=10, default=0)
-    # cad_exchange    = models.DecimalField(decimal_places=2, max_digits=10, default=0)
-    # status          = models.CharField(max_length=255, choices=STATUS_CHOICES)
-    # date_created    = models.DateTimeField(auto_now_add=True)
+
+# class VendorPayment(models.Model):
+
+#     wallet_id       = models.ForeignKey(to=CryptoWallet, on_delete=models.CASCADE)
+#     address         = models.CharField(max_length=255)
+#     amount_btc      = models.DecimalField(max_digits=20, decimal_places=7)
+#     date_created    = models.DateTimeField(auto_now_add=True)
+
+
+
+
+
+
 
 
 

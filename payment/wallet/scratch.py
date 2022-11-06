@@ -1,5 +1,8 @@
+import os
+import binascii
 
 
+print(binascii.hexlify(os.urandom(10)).decode())
 # def _hmac(data=dict):
 #     # key = settings.HMAC_KEY
 #     key = 'bleh'

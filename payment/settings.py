@@ -57,14 +57,16 @@ CELERY_BROKER_URL = 'amqp://localhost'
 
 
 REST_FRAMEWORK = {
-    # Use Django's standard `django.contrib.auth` permissions,
-    # or allow read-only access for unauthenticated users.
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'knox.auth.TokenAuthentication',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+        'user': '1000/day',
+    }
 }
 
 REST_KNOX = {
@@ -111,11 +113,12 @@ INSTALLED_APPS = [
     # 'rest_framework_hmac.hmac_key',
     'psycopg2',
     'django_celery_beat',
-    'payment.wallet',
-    'payment.price',
-    'payment.error',
     'payment.account',
+    'payment.error',
     'payment.hmac_auth',
+    'payment.plan',
+    'payment.price',
+    'payment.wallet',
 ]
 
 MIDDLEWARE = [

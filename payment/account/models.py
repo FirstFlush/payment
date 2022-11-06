@@ -43,7 +43,6 @@ class Account(AbstractBaseUser):
 
     username = models.CharField(max_length=255, unique=True)
     email = models.CharField(max_length=255, unique=True)
-
     # Required by Django:
     date_joined         = models.DateTimeField(auto_now_add=True)
     last_login          = models.DateTimeField(auto_now=True)
@@ -66,9 +65,3 @@ class Account(AbstractBaseUser):
     def has_module_perms(self, add_label):
         return True
 
-
-
-
-class VendorPayment(models.Model):
-    
-    date_created = models.DateTimeField(auto_now_add=True)
